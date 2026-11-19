@@ -4,6 +4,8 @@
 const E = require('../src/engine.js');
 const N = +process.argv[2] || 300;
 const SMART = process.argv.includes('smart');
+// calib：負けなしで全部打ち、勝負ごとの合計の分布を出す（目標を決めるため）
+const CALIB = process.argv.includes('calib'), CAL = {};
 
 // 何もない盤で、どの釘に玉がよく当たるか
 const TRAFFIC = E.SLOTS.map(() => 0);
@@ -50,8 +52,9 @@ function playMatch(st, n, k, r) {
     const color = hand.shift();
     const s = E.runShot(aim(st, color, r), { board: st.board, pockets, disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r }, color);
     total += E.shotTotal(s); st.shots.push(E.shotTotal(s));
-    if (total >= tgt) return { win: true, balls: hand.length };
+    if (total >= tgt && !CALIB) return { win: true, balls: hand.length };
   }
+  if (CALIB) { (CAL[n * 3 + k] = CAL[n * 3 + k] || []).push(total); return { win: true, balls: 0 }; }
   return { win: false };
 }
 function run(seed) {
@@ -78,6 +81,10 @@ for (let n = 1; n <= 6; n++) for (let k = 0; k < 3; k++) {
   const d = died[n * 3 + k] || 0;
   console.log(`夜${n} ${E.MATCH_NAME[k]} 目標${E.target(n, k)}  挑戦${alive} 負け${d}  勝率${alive ? Math.round((alive - d) / alive * 100) : 0}%`);
   alive -= d;
+}
+if (CALIB) for (let n = 1; n <= 7; n++) for (let k = 0; k < 3; k++) {
+  const a = (CAL[n * 3 + k] || []).sort((x, y) => x - y), q = f => a[Math.floor(a.length * f)];
+  console.log(`夜${n} ${E.MATCH_NAME[k]} 合計：10% ${q(.1)}  20% ${q(.2)}  中央 ${q(.5)}  90% ${q(.9)}`);
 }
 shots.sort((a, b) => a - b);
 console.log('1発の玉：中央値', shots[shots.length >> 1], ' 上位10%', shots[Math.floor(shots.length * .9)], ' 最大', shots[shots.length - 1]);

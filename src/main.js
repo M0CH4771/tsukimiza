@@ -161,7 +161,7 @@ function itemRow(o, extra = '') {
 function listSheet(onlyBoard) {
   const keys = onlyBoard ? S.board.filter(Boolean).filter((o, i, a) => a.findIndex(x => x.k === o.k && x.c === o.c) === i) : YAKUMONO_KEYS;
   sheet(`<h3>${onlyBoard ? '盤にある役物' : '役物の一覧'}</h3>${keys.map(k => itemRow(k)).join('')}
-    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉の数（×3の入賞口なら3つ分）。<br>役物は、自分と同じ色の玉が当たるとふえる。虹の玉は、どの色の役物にも反応する。<br>1つの玉は同じ役物で1回だけふえる。ふえるのは「打った玉」と「その子」まで（孫の玉は小さく見えて、もうふえない）。</p>`);
+    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉の数（×3の入賞口なら3つ分）。<br>役物は、自分と同じ色の玉が当たるとふえる。虹の玉は、どの色の役物にも反応する。<br>1つの玉は同じ役物で1回だけふえる（葉っぱは何回でも）。分かれた玉は新しい玉なので、下の役物でまたふえる。<br>盤の玉が${MAX_ALIVE}こをこえると、ふえた分は当たった玉に「×何こ分」として乗る。</p>`);
 }
 function moonSVG(p) {
   // p: 0〜1（光っている割合）。右から満ちていく
@@ -244,8 +244,11 @@ function drawBoard(c, o) {
   }
   (o.balls || []).forEach(b => {
     if (!b.alive) return;
-    const r = b.gen >= MAX_GEN ? BALL_R * .7 : BALL_R;   // 孫の玉（もうふえない）は小さく
-    c.fillStyle = ballStyle(c, b); c.beginPath(); c.arc(b.x, b.y, r, 0, Math.PI * 2); c.fill();
+    c.fillStyle = ballStyle(c, b); c.beginPath(); c.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); c.fill();
+    if (b.w > 1) {   // 盤がいっぱいのときに乗った分（×何こ分）
+      c.font = '9px DotGothic16, monospace'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = '#0b0812';
+      c.strokeText('×' + b.w, b.x, b.y - BALL_R - 2); c.fillStyle = '#fff3c4'; c.fillText('×' + b.w, b.x, b.y - BALL_R - 2);
+    }
   });
   (o.floats || []).forEach(f => {
     const a = Math.max(0, 1 - (o.t - f.t) / .9); if (!a) return;
@@ -439,7 +442,7 @@ async function shoot(x) {
           V.flash[ev.i] = V.t;
           const Y = YAKUMONO[ev.k];
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
-          V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: ev.c === ANY ? '#ffe2a8' : COLORS[ev.c].c, big: ev.n >= 4 || !!Y.chain });
+          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: ev.c === ANY ? '#ffe2a8' : COLORS[ev.c].c, big: ev.n >= 4 || !!Y.chain });
         } else if (ev.type === 'pocket') {
           V.pflash[ev.p] = V.t;
           if (ev.m !== 1) V.floats.push({ x: (ev.p + .5) * W / 7, y: POCKET_Y, text: ev.m ? '×' + ev.m : '締め！', t: V.t, color: ev.m ? '#ffe2a8' : '#ff6b6b', big: ev.m >= 3 });
@@ -447,7 +450,7 @@ async function shoot(x) {
           V.floats.push({ x: ev.x, y: ev.y, text: '滝のぼり！', t: V.t, color: '#7fd6ff', big: true });
         }
       }
-      setCalc(s.balls.filter(b => b.alive).length, s.landed.length + s.overflow, shotTotal(s));
+      setCalc(s.balls.reduce((a, b) => a + (b.alive ? b.w : 0), 0), s.landedN + s.overflow, shotTotal(s));
       if (V.floats.length > 120) V.floats = V.floats.slice(-120);
       paint();
       if (s.done) done(); else requestAnimationFrame(frame);
@@ -619,7 +622,7 @@ const HOW = `<h3>あそびかた</h3><div style="font-size:14px;line-height:1.8"
 ・玉は5色（<span style="color:#e8453c">赤</span>・<span style="color:#3a8ee8">青</span>・<span style="color:#4cbf5a">緑</span>・<span style="color:#f2c94e">黄</span>・<span style="color:#a35ad8">紫</span>）。1回の勝負で、5色を1つずつ打つ（順番はばらばら）。ごくまれに<b>虹の玉</b>が出て、どの色にもなる<br>
 ・玉を打つ前に、3つの役物から1つえらんで、<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>（役物の上に置くと置きかえ）。役物にも色がある<br>
 ・盤をさわって落とす位置を決め、指をはなすと玉が出る<br>
-・役物は、<b>同じ色の玉</b>が当たると玉をふやす。1つの玉は、同じ役物では1回だけ。ふえるのは打った玉とその子まで（孫の玉は小さく見えて、もうふえない）<br>
+・役物は、<b>同じ色の玉</b>が当たると玉をふやす。1つの玉は同じ役物では1回だけ（鯉に飛ばしてもらうのも1回）。分かれた玉は新しい玉なので、下の役物でまたふえる。<b>役物を並べるほど、どこまでもふえる</b><br>
 ・入賞口に入った玉が<b style="color:var(--gold)">縁</b>になる。×3の入賞口に入った玉は3つ分<br>
 ・手玉を打ちきるまでに<b style="color:var(--gold)">目標の縁</b>をためる。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>
 ・盤は勝負をまたいで育っていく。勝負のあいだは藁人の屋台で、めずらしい役物・入賞口みがき・玉袋（手玉＋1）が縁銭で買える<br>
