@@ -50,7 +50,7 @@ const YAKUMONO = {
   // ── めずらしい ──
   maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '当たると、玉が3つに分かれる',
     add: () => 2 },
-  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '玉が当たると、そのとき鯉より下で 鯉の近く（左右50）にいる玉を ぜんぶ いちばん上まで飛ばす（1回の落としで1回だけ。玉はふえない。飛んだ玉は、まだ当たっていない役物でまた効果が出る）', lift: true, once: true,
+  koi:      { r: 2, n: '鯉の滝のぼり', s: 'koi', p: 8, d: '当たった玉を、盤のいちばん上まで飛ばす（玉はふえない）。飛んだ玉と、その玉から分かれた玉は、もう鯉では飛ばない', lift: true,
     add: () => 0 },
   taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 6, d: '玉が当たるたびに、真下の入賞口の倍率が この勝負のあいだ＋1（玉はふえない）', drum: true,
     add: () => 0 },
@@ -150,10 +150,11 @@ function splitFrom(s, src, sl, n, j) {
 function spawn(s, i, n, Y, src) {
   const sl = SLOTS[i];
   for (let j = 0; j < n; j++) {
-    if (s.wait.length) { s.wait.push(i); continue; }   // 順番待ちがあるうちは、うしろに並ぶ
-    if (s.alive >= MAX_ALIVE) { s.wait.push(i); continue; }   // 盤がいっぱい：この役物の下で順番待ち
+    if (s.wait.length) { s.wait.push([i, !!(src && src.noKoi)]); continue; }   // 順番待ちがあるうちは、うしろに並ぶ
+    if (s.alive >= MAX_ALIVE) { s.wait.push([i, !!(src && src.noKoi)]); continue; }   // 盤がいっぱい：この役物の下で順番待ち
     // ぶつかった玉の はね返りを、少しずつ向きをずらして分ける（物理のまま）
     const nb = splitFrom(s, src, sl, n, j);
+    if (src && src.noKoi) nb.noKoi = true;   // 鯉で飛んだ玉から分かれた玉も、鯉では飛ばない
     nb.used.add(i); nb.cd[i] = s.t + COOLDOWN;   // 生まれた役物では、もう反応しない
     if (Y.mirror) { nb.x = W - sl.x; if (src) src.used.forEach(u => nb.used.add(u)); }   // 分身：左右反対の場所に化けて出る。もとの玉と同じ役物では もう効果が出ない
     if (Y.rocket) { nb.rocket = true; nb.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, sl.y - 40)); nb.vx = (s.r() - .5) * 90; }
@@ -166,13 +167,15 @@ function trigger(s, i, ball, viaChain) {
   if (!o || s.opt.disabled.has(i)) return;
   const Y = YAKUMONO[o.k];
   if (ball.used.has(i)) return;   // この玉は、この役物ではもう効果が出た
+  if (Y.lift && ball.noKoi) return; // 鯉で飛んだ玉（と、そこから分かれた玉）は、もう飛ばない
   if (Y.once) { if (s.onceUsed[i]) return; s.onceUsed[i] = true; }   // 1回の落としで1回だけの役物
   ball.used.add(i);
   const sl = SLOTS[i], p = pocketOf(sl.x);
   const n = Y.add(o, i, b, s);
   if (n > 0) spawn(s, i, n, Y, ball);
-  if (Y.lift) {   // 滝のぼり：盤にいる玉をぜんぶ上へ
-    for (const q of s.balls) if (q.alive && !q.rocket && q.y >= sl.y - 10 && Math.abs(q.x - sl.x) < 50) { q.rocket = true; q.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, q.y - 40)); q.vx = (s.r() - .5) * 90; }
+  if (Y.lift) {   // 滝のぼり：当たった玉を上へ。この玉と、ここから分かれる玉は、もう鯉では飛ばない
+    ball.noKoi = true; ball.rocket = true;
+    ball.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, ball.y - 40)); ball.vx = (s.r() - .5) * 90;
     s.events.push({ type: 'rocket', x: sl.x, y: sl.y });
   }
   if (Y.pull) { ball.vx = (W / 2 - ball.x) * 1.6; ball.vy = Math.min(ball.vy, -40); }
@@ -204,8 +207,9 @@ function stepShot(s, dt) {
   if (s.queue > 0 && s.t >= s.nextDrop) dropNext(s);
   // 順番待ちの玉を、生まれた役物の下から こぼす
   for (let rel = 0; rel < WAIT_PER_STEP && s.wait.length && s.alive < MAX_ALIVE; rel++) {
-    const i = s.wait.shift(), sl = SLOTS[i];
+    const [i, noKoi] = s.wait.shift(), sl = SLOTS[i];
     const nb = splitFrom(s, null, sl, 1, 0);
+    if (noKoi) nb.noKoi = true;
     nb.used.add(i); addBall(s, nb);
   }
   const b = s.opt.board;
