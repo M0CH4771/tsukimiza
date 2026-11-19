@@ -2,19 +2,19 @@
 // 玉はぜんぶ同じ白い玉。役物の効き方で ちがいを出す。
 // 点（縁）＝ 入賞口に入った玉 × その入賞口の倍率。入賞口の倍率は、屋台・太鼓・花火・金魚で育つ。
 // 1回の勝負：役物を PICKS 回置いて、1か所から手玉を全部いっぺんに落とす。
-// 1つの玉は、同じ役物では1回だけ反応する（葉っぱだけは何回でも）。分かれた玉は新しい玉で、下の役物でまたふえる。上限なし。
+// どの玉も、1つの役物で1回だけ効果が出る。分かれた玉は新しい玉で、下の役物でまたふえる。
+// ただし「1回の落としで1回だけ」の役物（once）もある（花火など、玉ごとに出ると強すぎるもの）。
 // 盤に一度に出る玉は MAX_ALIVE こまで。それをこえた分は、生まれた役物の下から順番に こぼれ落ちる（1つも捨てない）。
 
 const W = 360, H = 580;
 const BALL_R = 6, NAIL_R = 4, ITEM_R = 9;
-const MIN_IMPACT = 40, SHOT_TIMEOUT = 45;   // 当たりは、玉がちゃんとぶつかったとき（速さ40以上）だけ
+const MIN_IMPACT = 40;   // 当たりは、玉がちゃんとぶつかったとき（速さ40以上）だけ。時間切れはない（最後の1こが入るまで）
 const POCKET_Y = 516;
 const GRAVITY = 760, MAX_V = 720;
 const MAX_ALIVE = 2500;  // 盤に一度に出る玉の数（スマホで動かせる目安）
 const COOLDOWN = .3;     // 生まれた玉が、生まれた役物にすぐ当たらないための間
-const AGAIN_GAP = .5;    // 葉っぱ：同じ玉が続けて分身するまでの間
 const DROP_GAP = .15;    // 手玉を全部落とすときの、1つずつの間
-const WAIT_GAP = .004;   // 順番待ちの玉を出すときの間
+const WAIT_PER_STEP = 12;   // 順番待ちの玉を、1こまに何こまで出すか（1秒に1440こ）
 
 // 釘の位置：8段、偶数段は7本、奇数段は6本（ずらして並べる）
 const SLOTS = [];
@@ -45,13 +45,13 @@ const YAKUMONO = {
     add: (o, i, b) => SLOTS[i].nb.filter(j => b[j] && b[j].k === 'dango').length },
   jishaku:  { r: 0, n: '寄せ磁石', s: 'i_magnet', p: 3, d: '当たった玉を、まんなかの入賞口のほうへ はじく（玉はふえない）', pull: true,
     add: () => 0 },
-  koban:    { r: 0, n: '小判', s: 'coin', p: 3, d: '当たると縁銭＋1（1回の勝負で、盤ぜんぶの小判で3枚まで。玉はふえない）', coin: true,
+  koban:    { r: 0, n: '小判', s: 'coin', p: 3, d: '玉が当たるたびに小銭がたまり、盤ぜんぶの小判で10こ当たるごとに縁銭＋1（玉はふえない）', coin: true,
     add: () => 0 },
   // ── めずらしい ──
   maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '当たると、玉が3つに分かれる',
     add: () => 2 },
-  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '当たると玉が2つに分かれ、ふえた玉は盤のいちばん上まで飛ぶ（玉1つにつき同じ鯉で1回。鯉1匹が飛ばすのは、1回の落としで8こまで）', rocket: true,
-    add: (o, i, b, s) => (s.koi[i] || 0) < 8 ? 1 : 0 },
+  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '玉が当たると、そのとき鯉より下で 鯉の近く（左右50）にいる玉を ぜんぶ いちばん上まで飛ばす（1回の落としで1回だけ。玉はふえない。飛んだ玉は、まだ当たっていない役物でまた効果が出る）', lift: true, once: true,
+    add: () => 0 },
   taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 6, d: '玉が当たるたびに、真下の入賞口の倍率が この勝負のあいだ＋1（玉はふえない）', drum: true,
     add: () => 0 },
   kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 6, d: '当たると玉が1つふえる。玉が当たった勝負のあと、真下の入賞口の倍率が＋1（ずっと）', grow: true,
@@ -59,13 +59,13 @@ const YAKUMONO = {
   fox:      { r: 1, n: 'おコンの算盤', s: 'soroban', p: 6, d: '当たると、盤にある役物の種類 5つにつき玉が1つふえる',
     add: (o, i, b) => Math.floor(new Set(b.filter(Boolean).map(x => x.k)).size / 5) },
   // ── とくべつ ──
-  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 8, d: '当たった玉が、まわりの役物にも いっぺんに当たったことになる（雷そのものは玉をふやさない）', chain: true,
+  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 8, d: '当たった玉が、同じ段の となりの役物にも いっぺんに当たったことになる（雷そのものは玉をふやさない）', chain: true,
     add: () => 0 },
   oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 8, d: '当たると、玉が4つに分かれる',
     add: () => 3 },
-  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 8, d: '当たるたびに玉が分身する（同じ玉でも0.5秒おきに何回でも。葉っぱから出た玉は、その葉っぱでは分身しない）', again: true,
+  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 8, d: '当たると玉が分身して、分身は盤の左右反対の場所に化けて出る（分身は、もとの玉がもう当たった役物では効果が出ない）', mirror: true,
     add: () => 1 },
-  hanabi:   { r: 2, n: '花火', s: 'firework', p: 8, d: '玉が当たると、入賞口の倍率が ぜんぶ この勝負のあいだ＋1（花火1つにつき、1回の勝負で1回だけ。玉はふえない）', fire: true,
+  hanabi:   { r: 2, n: '花火', s: 'firework', p: 8, d: '玉が当たると、入賞口の倍率が ぜんぶ この勝負のあいだ＋2（1回の落としで1回だけ。玉はふえない）', fire: true, once: true,
     add: () => 0 },
 };
 const YAKUMONO_KEYS = Object.keys(YAKUMONO);
@@ -102,7 +102,7 @@ const BOSSES = [
   { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。左はしと右はしの入賞口2つずつに入った玉は数えない', fx: 'shime' },
 ];
 const MINIONS = [];
-const NIGHT_BASE = [18, 90, 300, 1100, 6000];   // ためる縁
+const NIGHT_BASE = [18, 90, 400, 1600, 8000];   // ためる縁
 const STORY_NIGHTS = 5;
 const MATCH_MULT = [1, 1.5, 2];
 const PICKS = 2;   // 1回の勝負で、役物をえらんで置ける回数（そのあと手玉を全部落とす）
@@ -125,8 +125,8 @@ function newBoard() { const b = SLOTS.map(() => null); for (const [i, o] of Obje
 // used：この玉がもう反応した役物。cd：葉っぱで次に分身できる時刻
 function newBall(x, y, vx, vy) { return { x, y, vx, vy, used: new Set(), cd: {}, alive: true, slow: 0, rocket: false }; }
 function newShot(x, opt, n) {
-  const s = { opt, r: opt.r, x, t: 0, done: false, id: Math.floor(opt.r() * 1e9), queue: n, nextDrop: 0, wait: [], nextWait: 0,
-    balls: [], alive: 0, born: 0, count: 0, landedN: 0, events: [], pk: opt.pockets.slice(), fires: {}, koi: {}, coins: 0, grown: [] };
+  const s = { opt, r: opt.r, x, t: 0, done: false, id: Math.floor(opt.r() * 1e9), queue: n, nextDrop: 0, wait: [],
+    balls: [], alive: 0, born: 0, count: 0, landedN: 0, events: [], pk: opt.pockets.slice(), coins: 0, coinHits: 0, grown: [], onceUsed: {} };
   dropNext(s);
   return s;
 }
@@ -137,17 +137,25 @@ function dropNext(s) {
   addBall(s, newBall(x0, 34, (r() - .5) * 20, 40));
   s.nextDrop = s.t + DROP_GAP;
 }
-// 役物 i から、玉を n こ出す（盤がいっぱいなら、上から落とす順番待ちに回す）
-function spawn(s, i, n, Y) {
+// 分かれた玉の出かた：もとの玉（はね返ったあと）の速さと向きを、扇のように少しずつずらす
+function splitFrom(s, src, sl, n, j) {
+  let vx, vy, x, y;
+  if (src) { vx = src.vx; vy = src.vy; x = src.x; y = src.y; }
+  else { vx = 0; vy = 60; x = sl.x; y = sl.y + ITEM_R + BALL_R; }   // 玉がない（順番待ち）ときは、役物の下から
+  const sp = Math.max(90, Math.hypot(vx, vy)) * (.8 + s.r() * .25);
+  const a = Math.atan2(vy, vx) + (n === 1 ? (s.r() < .5 ? -1 : 1) * .45 : (j / (n - 1) - .5) * 1.4) + (s.r() - .5) * .2;
+  return newBall(x, y, Math.cos(a) * sp, Math.sin(a) * sp);
+}
+// 役物 i から、玉を n こ出す（盤がいっぱいなら、その役物の下で順番待ち）
+function spawn(s, i, n, Y, src) {
   const sl = SLOTS[i];
   for (let j = 0; j < n; j++) {
     if (s.wait.length) { s.wait.push(i); continue; }   // 順番待ちがあるうちは、うしろに並ぶ
     if (s.alive >= MAX_ALIVE) { s.wait.push(i); continue; }   // 盤がいっぱい：この役物の下で順番待ち
-    // 下むきの扇形に こぼれ落ちる（上の役物には もどらない）
-    const ang = Math.PI * (.2 + .6 * (n === 1 ? .5 : j / (n - 1)));
-    const sp = 120 + s.r() * 60;
-    const nb = newBall(sl.x + Math.cos(ang) * 4, sl.y + ITEM_R + BALL_R, Math.cos(ang) * sp * 1.4, Math.sin(ang) * sp * .7);
+    // ぶつかった玉の はね返りを、少しずつ向きをずらして分ける（物理のまま）
+    const nb = splitFrom(s, src, sl, n, j);
     nb.used.add(i); nb.cd[i] = s.t + COOLDOWN;   // 生まれた役物では、もう反応しない
+    if (Y.mirror) { nb.x = W - sl.x; if (src) src.used.forEach(u => nb.used.add(u)); }   // 分身：左右反対の場所に化けて出る。もとの玉と同じ役物では もう効果が出ない
     if (Y.rocket) { nb.rocket = true; nb.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, sl.y - 40)); nb.vx = (s.r() - .5) * 90; }
     addBall(s, nb);
   }
@@ -157,19 +165,24 @@ function trigger(s, i, ball, viaChain) {
   const b = s.opt.board, o = b[i];
   if (!o || s.opt.disabled.has(i)) return;
   const Y = YAKUMONO[o.k];
-  if (Y.again) { if (ball.used.has(i) || (ball.cd[i] && s.t < ball.cd[i])) return; ball.cd[i] = s.t + AGAIN_GAP; }
-  else { if (ball.used.has(i)) return; ball.used.add(i); }
+  if (ball.used.has(i)) return;   // この玉は、この役物ではもう効果が出た
+  if (Y.once) { if (s.onceUsed[i]) return; s.onceUsed[i] = true; }   // 1回の落としで1回だけの役物
+  ball.used.add(i);
   const sl = SLOTS[i], p = pocketOf(sl.x);
   const n = Y.add(o, i, b, s);
-  if (n > 0) spawn(s, i, n, Y);
+  if (n > 0) spawn(s, i, n, Y, ball);
+  if (Y.lift) {   // 滝のぼり：盤にいる玉をぜんぶ上へ
+    for (const q of s.balls) if (q.alive && !q.rocket && q.y >= sl.y - 10 && Math.abs(q.x - sl.x) < 50) { q.rocket = true; q.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, q.y - 40)); q.vx = (s.r() - .5) * 90; }
+    s.events.push({ type: 'rocket', x: sl.x, y: sl.y });
+  }
   if (Y.pull) { ball.vx = (W / 2 - ball.x) * 1.6; ball.vy = Math.min(ball.vy, -40); }
-  if (Y.coin && s.coins < 3) { s.coins++; s.events.push({ type: 'coin', x: sl.x, y: sl.y }); }
+  if (Y.coin) { s.coinHits++; if (s.coinHits % 10 === 0) { s.coins++; s.events.push({ type: 'coin', x: sl.x, y: sl.y }); } }
   if (Y.drum && s.pk[p] > 0) { s.pk[p]++; s.events.push({ type: 'pk', p, m: s.pk[p], x: sl.x, y: sl.y }); }
-  if (Y.fire && !s.fires[i]) { s.fires[i] = (s.fires[i] || 0) + 1; for (let q = 0; q < s.pk.length; q++) if (s.pk[q] > 0) s.pk[q]++; s.events.push({ type: 'fire', x: sl.x, y: sl.y }); }
+  if (Y.fire) { for (let q = 0; q < s.pk.length; q++) if (s.pk[q] > 0) s.pk[q] += 2; s.events.push({ type: 'fire', x: sl.x, y: sl.y }); }
   if (Y.grow && !s.grown.includes(i)) s.grown.push(i);
   s.events.push({ type: 'hit', i, k: o.k, x: sl.x, y: sl.y, n, chain: !!viaChain });
-  if (Y.chain && !viaChain) SLOTS[i].nb.forEach(j => { if (b[j] && !YAKUMONO[b[j].k].chain) trigger(s, j, ball, true); });
-  if (Y.rocket && n > 0) { s.koi[i] = (s.koi[i] || 0) + 1; s.events.push({ type: 'rocket', x: sl.x, y: sl.y }); }
+  if (Y.chain && !viaChain) SLOTS[i].nb.forEach(j => { if (SLOTS[j].row === sl.row && b[j] && !YAKUMONO[b[j].k].chain) trigger(s, j, ball, true); });
+  if (Y.rocket && n > 0) s.events.push({ type: 'rocket', x: sl.x, y: sl.y });
 }
 function collide(ball, cx, cy, R, e, s) {
   const dx = ball.x - cx, dy = ball.y - cy, d2 = dx * dx + dy * dy;
@@ -190,13 +203,12 @@ function stepShot(s, dt) {
   s.t += dt;
   if (s.queue > 0 && s.t >= s.nextDrop) dropNext(s);
   // 順番待ちの玉を、生まれた役物の下から こぼす
-  while (s.wait.length && s.alive < MAX_ALIVE && s.t >= s.nextWait) {
-    const i = s.wait.shift(), sl = SLOTS[i], a = Math.PI * (.2 + .6 * s.r()), sp = 120 + s.r() * 60;
-    const nb = newBall(sl.x + Math.cos(a) * 4, sl.y + ITEM_R + BALL_R, Math.cos(a) * sp * 1.4, Math.sin(a) * sp * .7);
-    nb.used.add(i); nb.cd[i] = s.t + COOLDOWN; addBall(s, nb);
-    s.nextWait = Math.max(s.t, s.nextWait) + WAIT_GAP;
+  for (let rel = 0; rel < WAIT_PER_STEP && s.wait.length && s.alive < MAX_ALIVE; rel++) {
+    const i = s.wait.shift(), sl = SLOTS[i];
+    const nb = splitFrom(s, null, sl, 1, 0);
+    nb.used.add(i); addBall(s, nb);
   }
-  const b = s.opt.board, timeUp = s.t > SHOT_TIMEOUT;
+  const b = s.opt.board;
   for (let bi = 0; bi < s.balls.length; bi++) {
     const ball = s.balls[bi];
     if (!ball.alive) continue;
@@ -222,14 +234,13 @@ function stepShot(s, dt) {
     }
     // 止まったら、そっと押す
     if (Math.abs(ball.vx) + Math.abs(ball.vy) < 30) { ball.slow += dt; if (ball.slow > .35) { ball.vx = (s.r() - .5) * 160; ball.vy = -60; ball.slow = 0; } } else ball.slow = 0;
-    if (ball.y >= POCKET_Y || timeUp) {
+    if (ball.y >= POCKET_Y) {
       ball.alive = false; s.alive--;
       const p = pocketOf(ball.x), m = s.pk[p];
       s.landedN++; s.count += m;
       s.events.push({ type: 'pocket', p, m, x: ball.x });
     }
   }
-  if (timeUp && s.wait.length) { s.wait.forEach(i => { const m = s.pk[pocketOf(SLOTS[i].x)]; s.landedN++; s.count += m; }); s.wait = []; }   // 時間切れ：順番待ちの玉は真下の入賞口へ
   // 入った玉はときどき片づける（配列が長くなりすぎないように）
   if (s.balls.length > 4000 && s.alive < s.balls.length / 3) s.balls = s.balls.filter(x => x.alive);
   if (s.queue <= 0 && !s.wait.length && s.alive <= 0) s.done = true;
@@ -243,7 +254,7 @@ function afterShot(s, pockets) {
 }
 function shotTotal(s) { return s.count; }
 // 最後まで一気に（シミュレーター用）
-function runShot(x, opt, n) { const s = newShot(x, opt, n); while (!s.done) stepShot(s, 1 / 120); return s; }
+function runShot(x, opt, n) { const s = newShot(x, opt, n); while (!s.done && s.t < 900) stepShot(s, 1 / 120); return s; }   // 900秒はボット用の安全弁
 
 // ===== 乱数 =====
 function rng(seed) {
