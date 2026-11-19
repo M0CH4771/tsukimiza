@@ -525,7 +525,10 @@ function title() {
   $('titleItems').innerHTML = ['lantern', 'cat', 'koi', 'firework'].map(k => spr(k, '48px')).join('');
   const b = store('pachinko-best');
   $('bestRec').textContent = b && b.p ? `最高記録：夜${b.n}・${MATCH_NAME[b.k]}　最大の一発 ${(b.hand || 0).toLocaleString()}点` : '';
-  $('bEndless').classList.toggle('hidden', !store('pachinko-cleared'));
+  // エンドレスは最終話をクリアすると遊べる（それまではカギつきで見せておく）
+  const cleared = !!store('pachinko-cleared');
+  $('bEndless').disabled = !cleared;
+  $('bEndless').innerHTML = cleared ? 'エンドレス<small>十五夜のその先へ。どこまで縁を集められるか</small>' : 'エンドレス<small>🔒 最終話をクリアすると遊べる</small>';
   $('bGallery').classList.toggle('hidden', !Object.keys(store('pachinko-cg') || {}).length);
   $('bStart').textContent = store('pachinko-seen-scenes') ? 'ストーリーを はじめから' : 'はじめる';
   show('s-title');
