@@ -465,9 +465,8 @@ function rollShop() {
   const rare = shuffle(YAKUMONO_KEYS.filter(k => YAKUMONO[k].r >= 1), S.r)[0];
   items.push({ kind: 'yaku', k: rare, p: YAKUMONO[rare].p + 2 });
   const ps = shuffle([0, 1, 2, 3, 4, 5, 6], S.r).slice(0, 2);
-  ps.forEach(p => items.push({ kind: 'pocket', p, p2: 4 + S.pockets[p] }));
-  if (S.extraBalls < 2) items.push({ kind: 'ball', p2: 8 + S.extraBalls * 4 });
-  items.forEach(it => { if (it.p2 != null) it.p = it.p2; });
+  ps.forEach(pos => items.push({ kind: 'pocket', pos, p: 4 + S.pockets[pos] }));   // pos＝どの入賞口か、p＝値段
+  if (S.extraBalls < 2) items.push({ kind: 'ball', p: 8 + S.extraBalls * 4 });
   S.shop = items;
 }
 const POS = ['いちばん左', '左から2番目', '左から3番目', 'まんなか', '右から3番目', '右から2番目', 'いちばん右'];
@@ -476,7 +475,7 @@ function renderShop() {
   $('shopItems').innerHTML = S.shop.map((it, i) => {
     let ic, title, d;
     if (it.kind === 'yaku') { const Y = YAKUMONO[it.k]; ic = spr(Y.s, '40px'); title = `役物：${Y.n}`; d = `［${RARITY_NAME[Y.r]}］${Y.d}`; }
-    else if (it.kind === 'pocket') { ic = `<span style="font-size:18px;color:#ffe2a8">×${S.pockets[it.p] + 1}</span>`; title = '入賞口みがき'; d = `${POS[it.p]}の入賞口 ×${S.pockets[it.p]}→×${S.pockets[it.p] + 1}`; }
+    else if (it.kind === 'pocket') { ic = `<span style="font-size:18px;color:#ffe2a8">×${S.pockets[it.pos] + 1}</span>`; title = '入賞口みがき'; d = `${POS[it.pos]}の入賞口 ×${S.pockets[it.pos]}→×${S.pockets[it.pos] + 1}`; }
     else { ic = spr('purse', '40px'); title = '玉袋'; d = '手玉が1つふえる（ずっと）'; }
     const can = !it.sold && S.money >= it.p;
     return `<div class="item px ${it.sold ? 'sold' : ''}"><div class="ic">${ic}</div><div class="tx"><b>${title}</b>${d}</div><button class="btn gold" data-buy="${i}" ${can ? '' : 'disabled'}>${it.sold ? '売りきれ' : `縁銭${it.p}`}</button></div>`;
@@ -492,7 +491,7 @@ function buy(i) {
   const it = S.shop[i]; if (it.sold || S.money < it.p) return;
   S.money -= it.p; it.sold = true;
   if (it.kind === 'yaku') { S.tray.push({ k: it.k }); S.traySel = S.tray.length - 1; }
-  else if (it.kind === 'pocket') S.pockets[it.p]++;
+  else if (it.kind === 'pocket') S.pockets[it.pos]++;
   else S.extraBalls++;
   $('shopSay').textContent = it.kind === 'yaku' ? '盤の釘をタップすると、そこに置けますよ。' : T.bought[Math.floor(S.r() * T.bought.length)];
   renderShop();
