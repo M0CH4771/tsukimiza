@@ -247,8 +247,8 @@ function stepShot(s, dt) {
       s.events.push({ type: 'pocket', p, m, x: ball.x });
     }
   }
-  // 入った玉はときどき片づける（配列が長くなりすぎないように）
-  if (s.balls.length > 4000 && s.alive < s.balls.length / 3) s.balls = s.balls.filter(x => x.alive);
+  // 入った玉はときどき片づける。画面が同じ配列を見ているので、作りなおさずに その場でつめる
+  if (s.balls.length > 4000 && s.alive < s.balls.length / 3) { const a = s.balls; let w = 0; for (let q = 0; q < a.length; q++) if (a[q].alive) a[w++] = a[q]; a.length = w; }
   if (s.queue <= 0 && !s.wait.length && s.alive <= 0) s.done = true;
 }
 // 打ち終わったあと：玉が当たった金魚の真下の入賞口が、ずっと＋1。返り値：育った入賞口の番号

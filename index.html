@@ -524,8 +524,8 @@ function stepShot(s, dt) {
       s.events.push({ type: 'pocket', p, m, x: ball.x });
     }
   }
-  // 入った玉はときどき片づける（配列が長くなりすぎないように）
-  if (s.balls.length > 4000 && s.alive < s.balls.length / 3) s.balls = s.balls.filter(x => x.alive);
+  // 入った玉はときどき片づける。画面が同じ配列を見ているので、作りなおさずに その場でつめる
+  if (s.balls.length > 4000 && s.alive < s.balls.length / 3) { const a = s.balls; let w = 0; for (let q = 0; q < a.length; q++) if (a[q].alive) a[w++] = a[q]; a.length = w; }
   if (s.queue <= 0 && !s.wait.length && s.alive <= 0) s.done = true;
 }
 // 打ち終わったあと：玉が当たった金魚の真下の入賞口が、ずっと＋1。返り値：育った入賞口の番号
@@ -1365,7 +1365,7 @@ async function shoot(x) {
           const Y = YAKUMONO[ev.k];
           if (!ev.n && !Y.chain) continue;
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
-          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
+          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .9)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
         } else if (ev.type === 'pocket') {
           V.plast = V.plast || {}; V.plast[ev.p] = V.t;   // 入った：入賞口のふちだけ光らせる
         } else if (ev.type === 'rocket') {
