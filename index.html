@@ -193,6 +193,7 @@ canvas.board{width:100%;display:block;touch-action:none}
     <div class="logo"><div class="series">よいまつり横丁　第2章</div><div class="big">月見座</div><div class="sub">十五夜に、大台をまわせ</div></div>
     <div class="title-items" id="titleItems"></div>
     <div class="best" id="bestRec"></div>
+    <button class="btn red wide hidden" id="bContinue" style="margin-bottom:8px"></button>
     <button class="btn red wide" id="bStart">はじめる</button>
     <div class="row2"><button class="btn" id="bHow">あそびかた</button><button class="btn" id="bListT">役物の一覧</button></div>
     <button class="btn wide" id="bEndless" style="margin-top:8px"></button>
@@ -274,6 +275,7 @@ const MIN_IMPACT = 40, SHOT_TIMEOUT = 10;   // 当たりは、玉がちゃんと
 const POCKET_Y = 516;
 const NAIL_MON = 30;   // ただの釘に当たったときの文
 const GRAVITY = 760, MAX_V = 720;
+const MAX_BALLS = 5;   // 葉っぱの分身で増える玉の上限（一発）
 
 // 釘の位置：8段、偶数段は7本、奇数段は6本（ずらして並べる）
 const SLOTS = [];
@@ -302,30 +304,30 @@ const YAKUMONO = {
     fx: c => { c.mul += .5; return '倍率+0.5'; } },
   maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '倍率＋1',
     fx: c => { c.mul += 1; return '倍率+1'; } },
-  dango:    { r: 0, n: 'だんご', s: 'dango', p: 4, d: '文＋80。となりのだんご1つにつき さらに＋80',
-    fx: (c, i, o, b) => { const v = 80 * (1 + SLOTS[i].nb.filter(j => b[j] && b[j].k === 'dango').length); c.mon += v; return `+${v}文`; } },
+  dango:    { r: 0, n: 'だんご', s: 'dango', p: 4, d: '文＋60。となりのだんご1つにつき さらに＋60',
+    fx: (c, i, o, b) => { const v = 60 * (1 + SLOTS[i].nb.filter(j => b[j] && b[j].k === 'dango').length); c.mon += v; return `+${v}文`; } },
   sakura:   { r: 0, n: '桜', s: 'sakura', p: 4, d: '文＋40。盤にある桜1本につき さらに＋40',
     fx: (c, i, o, b) => { const v = 40 * b.filter(x => x && x.k === 'sakura').length; c.mon += v; return `+${v}文`; } },
-  taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 5, d: '文＋（この一発で当たった役物の数×40）',
-    fx: c => { const v = c.hits * 40; c.mon += v; return `+${v}文`; } },
-  kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 5, d: '文＋（育ち）。当たるたびに育ちが10ふえる（ずっと）。はじめは80',
-    fx: (c, i, o) => { o.g = (o.g || 80); const v = o.g; c.mon += v; o.g += 10; return `+${v}文`; } },
+  taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 5, d: '文＋（この一発で当たった役物の数×70）',
+    fx: c => { const v = c.hits * 70; c.mon += v; return `+${v}文`; } },
+  kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 5, d: '文＋（育ち）。当たるたびに育ちが15ふえる（ずっと）。はじめは100',
+    fx: (c, i, o) => { o.g = (o.g || 100); const v = o.g; c.mon += v; o.g += 15; return `+${v}文`; } },
   koban:    { r: 0, n: '小判', s: 'coin', p: 4, d: '当たると縁銭＋1（一発に2回まで）',
     fx: c => { if (c.coins >= 2) return null; c.coins++; return '縁銭+1'; } },
-  fox:      { r: 1, n: 'おコンの算盤', s: 'fox', p: 6, d: 'この一発で当たった役物の種類1つにつき 倍率＋0.5（一発に1回）', once: true,
-    fx: c => { const v = c.kinds.size * .5; c.mul += v; return `倍率+${v}`; } },
-  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 7, d: '倍率×1.5（一発に1回だけ。2本目からは倍率＋0.5）', once: true,
+  fox:      { r: 1, n: 'おコンの算盤', s: 'fox', p: 6, d: 'この一発で当たった役物の種類1つにつき 倍率＋0.75（一発に1回）', once: true,
+    fx: c => { const v = c.kinds.size * .75; c.mul += v; return `倍率+${v}`; } },
+  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 7, d: '倍率×2.5（一発に1回だけ。2本目からは倍率＋1.5）', once: true,
     fx: c => {
-      if (c.oniUsed) { c.mul += .5; return '倍率+0.5'; }
-      c.oniUsed = true; c.mul = Math.round(c.mul * 1.5 * 100) / 100; return '倍率×1.5';
+      if (c.oniUsed) { c.mul += 1.5; return '倍率+1.5'; }
+      c.oniUsed = true; c.mul = Math.round(c.mul * 2.5 * 100) / 100; return '倍率×2.5';
     } },
-  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '文＋80。玉を上へはね上げる（玉1つに1回まで）', bounce: true,
-    fx: c => { c.mon += 80; return '+80文'; } },
-  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 8, d: '玉が2つに分かれる（一発で玉は3つまで）', split: true,
+  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '文＋150。玉を盤のいちばん上まで飛ばす（玉1つに1回まで）', bounce: true,
+    fx: c => { c.mon += 150; return '+150文'; } },
+  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 10, d: '当たるたびに玉が分身する（一発で玉は5こまで）', split: true,
     fx: () => '分身！' },
   hanabi:   { r: 1, n: '花火', s: 'firework', p: 6, d: 'となりの役物を ぜんぶ発動する（一発に1回）', once: true,
     chain: 'nb', fx: () => 'ドン！' },
-  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 7, d: '同じ段の役物を ぜんぶ発動する（一発に1回）', once: true,
+  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 7, d: '同じ段の役物を ぜんぶ発動する（一発に2回）', once: 2,
     chain: 'row', fx: () => 'ゴロゴロ！' },
 };
 const YAKUMONO_KEYS = Object.keys(YAKUMONO);
@@ -363,7 +365,7 @@ const MINIONS = [
   [{ n: 'たこの八っつぁん', s: 'octopus' }, { n: '天狗の旦那', s: 'tengu' }],
   [{ n: 'くじらの親方', s: 'whale' }, { n: '鷹の目の辰', s: 'eagle' }],
 ];
-const NIGHT_BASE = [1800, 7000, 26000, 85000, 270000];   // 点の桁を大きく（文を10倍にしたのに合わせて10倍）
+const NIGHT_BASE = [2000, 8500, 36000, 125000, 420000];   // 点の桁を大きく（文を10倍にしたのに合わせて10倍）
 const STORY_NIGHTS = 5;
 const MATCH_MULT = [1, 1.5, 2];
 const MATCH_NAME = ['宵', '夜ふけ', '真夜中'];
@@ -387,7 +389,7 @@ function newShot(x, opt) {
   return {
     opt, r, t: 0, done: false,
     balls: [{ x: Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, x + (r() - .5) * (opt.shake ? 130 : 3))), y: 34, vx: (r() - .5) * 20, vy: 40, alive: true, hit: {}, slow: 0, bounces: 0 }],
-    mon: 0, mul: 1, hits: 0, kinds: new Set(), coins: 0, onceUsed: new Set(),
+    mon: 0, mul: 1, hits: 0, kinds: new Set(), coins: 0, onceUsed: new Map(),
     landed: [], events: [],
   };
 }
@@ -399,7 +401,8 @@ function trigger(s, i, direct, ball) {
     s.mon += NAIL_MON; ev.nail = true; ev.text = '+' + NAIL_MON; s.events.push(ev); return;
   }
   const Y = YAKUMONO[o.k];
-  if (Y.once) { if (s.onceUsed.has(i)) return; s.onceUsed.add(i); }
+  // once：一発に何回まで効くか（true は1回）
+  if (Y.once) { const n = s.onceUsed.get(i) || 0; if (n >= (Y.once === true ? 1 : Y.once)) return; s.onceUsed.set(i, n + 1); }
   s.hits++; s.kinds.add(o.k);
   const before = s.mon;
   ev.text = Y.fx(s, i, o, b);
@@ -407,9 +410,17 @@ function trigger(s, i, direct, ball) {
   if (s.opt.neon && s.mon > before) { const half = Math.round((s.mon - before) / 2); s.mon = before + half; ev.text = `+${half}文`; }
   ev.k = o.k; s.events.push(ev);
   if (direct && ball) {
-    if (Y.bounce && ball.bounces < 1) { ball.bounces++; ball.vy = -520 - s.r() * 80; ball.vx = (s.r() - .5) * 260; }
-    if (Y.split && s.balls.length < 3) {
-      const nb = { x: ball.x, y: ball.y, vx: -ball.vx - 60 * Math.sign(ball.vx || 1), vy: ball.vy, alive: true, hit: { ...ball.hit }, slow: 0, bounces: ball.bounces };
+    // 鯉：盤のいちばん上まで、まっすぐ飛ばす（のぼるあいだは釘をすりぬける）
+    if (Y.bounce && ball.bounces < 1) {
+      ball.bounces++; ball.rocket = true;
+      ball.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, ball.y - 40)); ball.vx = (s.r() - .5) * 90;
+      s.events.push({ type: 'rocket', x: ball.x, y: ball.y });
+    }
+    // 葉っぱ：当たるたびに分身。生まれたての玉は、同じ葉っぱに0.25秒は反応しない
+    if (Y.split && s.balls.length < MAX_BALLS) {
+      const sp = Math.max(160, Math.abs(ball.vx));
+      const nb = { x: ball.x, y: ball.y, vx: -Math.sign(ball.vx || 1) * sp, vy: ball.vy, alive: true, hit: {}, slow: 0, bounces: ball.bounces, skip: i, skipT: s.t + .25 };
+      ball.skip = i; ball.skipT = s.t + .25;
       s.balls.push(nb); s.events.push({ type: 'split', x: ball.x, y: ball.y });
     }
     if (Y.chain) {
@@ -437,18 +448,19 @@ function stepShot(s, dt) {
   for (const ball of s.balls) {
     if (!ball.alive) continue;
     ball.vy += GRAVITY * dt;
+    if (ball.rocket && ball.vy >= 0) ball.rocket = false;   // いちばん上に着いたら、ふつうに落ちる
     const sp = Math.hypot(ball.vx, ball.vy);
-    if (sp > MAX_V) { ball.vx *= MAX_V / sp; ball.vy *= MAX_V / sp; }
+    if (sp > MAX_V && !ball.rocket) { ball.vx *= MAX_V / sp; ball.vy *= MAX_V / sp; }
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
     if (ball.x < BALL_R) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx) * .6; }
     if (ball.x > W - BALL_R) { ball.x = W - BALL_R; ball.vx = -Math.abs(ball.vx) * .6; }
     if (ball.y < BALL_R) { ball.y = BALL_R; ball.vy = Math.abs(ball.vy) * .5; }
     if (s.opt.block) collide(ball, W / 2, 300, 30 + BALL_R, .5, s);
-    for (let i = 0; i < SLOTS.length; i++) {
+    for (let i = 0; !ball.rocket && i < SLOTS.length; i++) {
       const sl = SLOTS[i];
       if (Math.abs(sl.y - ball.y) > 24 || Math.abs(sl.x - ball.x) > 24) continue;
       const item = b[i] && !s.opt.disabled.has(i);
-      if (collide(ball, sl.x, sl.y, (item ? ITEM_R : NAIL_R) + BALL_R, .55, s) === 2) trigger(s, i, true, ball);
+      if (collide(ball, sl.x, sl.y, (item ? ITEM_R : NAIL_R) + BALL_R, .55, s) === 2 && !(ball.skip === i && s.t < ball.skipT)) trigger(s, i, true, ball);
     }
     // 止まったら、そっと押す
     if (Math.hypot(ball.vx, ball.vy) < 25) { ball.slow += dt; if (ball.slow > .35) { ball.vx = (s.r() - .5) * 160; ball.vy = -60; ball.slow = 0; } } else ball.slow = 0;
@@ -461,7 +473,8 @@ function stepShot(s, dt) {
   }
   if (s.balls.every(x => !x.alive)) s.done = true;
 }
-function pocketMult(s) { return s.landed.reduce((a, p) => a + s.opt.pockets[p], 0); }
+// 入賞口の倍率：玉が分かれたら、入ったうちで いちばん高い入賞口の倍率
+function pocketMult(s) { return s.landed.reduce((a, p) => Math.max(a, s.opt.pockets[p]), 0); }
 function shotTotal(s) { return Math.floor(s.mon * s.mul * pocketMult(s)); }
 // 最後まで一気に（シミュレーター用）
 function runShot(x, opt) { const s = newShot(x, opt); while (!s.done) stepShot(s, 1 / 120); return s; }
@@ -469,7 +482,9 @@ function runShot(x, opt) { const s = newShot(x, opt); while (!s.done) stepShot(s
 // ===== 乱数 =====
 function rng(seed) {
   let a = seed >>> 0;
-  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const f = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  f.get = () => a; f.set = v => { a = v >>> 0; };   // 続きから遊ぶときに、乱数の続きも戻す
+  return f;
 }
 function shuffle(arr, r) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
 
@@ -965,7 +980,7 @@ function itemRow(k, extra = '') { const Y = YAKUMONO[k]; return `<div class="ite
 function listSheet(onlyBoard) {
   const keys = onlyBoard ? [...new Set(S.board.filter(Boolean).map(o => o.k))] : YAKUMONO_KEYS;
   sheet(`<h3>${onlyBoard ? '盤にある役物' : '役物の一覧'}</h3>${keys.map(k => itemRow(k)).join('')}
-    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">ただの釘に当たると 文＋${NAIL_MON}。<br>点 ＝ 文 × 倍率 × 入賞口の倍率（玉が分かれたら、入った入賞口の倍率を足し算）</p>`);
+    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">ただの釘に当たると 文＋${NAIL_MON}。<br>点 ＝ 文 × 倍率 × 入賞口の倍率（玉が分かれたら、入ったうちで いちばん高い入賞口の倍率）</p>`);
 }
 function moonSVG(p) {
   // p: 0〜1（光っている割合）。右から満ちていく
@@ -1060,13 +1075,41 @@ let S = null;
 function newRun(story) {
   const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
   S = { seed, r: rng(seed), n: 1, k: 0, money: 4, board: newBoard(), pockets: POCKETS_START.slice(), tray: [], extraBalls: 0, best: 0, story, endless: !story, speed: S ? S.speed : 1, name: playerName() };
+  clearSave();
+}
+
+// ===== セーブ（続きから遊ぶ） =====
+// 区切りごとに、そこから再開できるだけの情報をブラウザに保存する
+//   vs：相手の紹介の画面／play：手番のはじめ（役物えらび）／shop：藁人の屋台
+const SAVE_KEY = 'tsukimiza-save';
+function snap(where) {
+  if (!S) return;
+  store(SAVE_KEY, {
+    v: 1, where, at: Date.now(),
+    n: S.n, k: S.k, money: S.money, board: S.board, pockets: S.pockets, tray: S.tray, extraBalls: S.extraBalls,
+    best: S.best, story: S.story, endless: S.endless, seed: S.seed, rs: S.r.get(), speed: S.speed,
+    shop: where === 'shop' ? S.shop : null, rerollCost: S.rerollCost,
+    play: where === 'play' ? { score: S.score, balls: S.balls, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft } : null,
+  });
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function savedRun() { const d = store(SAVE_KEY); return d && d.v === 1 ? d : null; }
+function resume() {
+  const d = savedRun(); if (!d) return;
+  S = { seed: d.seed, r: rng(d.seed), n: d.n, k: d.k, money: d.money, board: d.board, pockets: d.pockets, tray: d.tray || [], extraBalls: d.extraBalls,
+    best: d.best || 0, story: d.story, endless: d.endless, speed: d.speed || 1, name: playerName(), rerollCost: d.rerollCost || 2 };
+  S.r.set(d.rs);
+  $('speedLbl').textContent = S.speed === 1 ? 'ふつう' : 'はやい';
+  if (d.where === 'shop' && d.shop) { S.shop = d.shop; enterShop(); return; }
+  if (d.where === 'play' && d.play) { matchScreen(d.play); S.phase = 'draft'; S.draft = d.play.draft; setHint(''); paint(); openDraft(); return; }
+  showVs(true);
 }
 function curOpp() { return opponent(S.n, S.k); }
 function curBoss() { return S.k === 2 ? curOpp() : null; }
 function oppFace(o, big) { return o.who ? `<img src="${face(o.who, 'n')}" alt="">` : spr(o.s, big ? '110px' : '38px'); }
 
-async function showVs() {
-  const ns = S.story && S.n <= STORY_NIGHTS ? NIGHT_SCENES[S.n - 1] : null;
+async function showVs(skipScenes) {
+  const ns = !skipScenes && S.story && S.n <= STORY_NIGHTS ? NIGHT_SCENES[S.n - 1] : null;
   if (ns && S.k === 0) await scene(ns.intro);
   if (ns && S.k === 2) await scene(ns.mid);
   const o = curOpp(), boss = curBoss();
@@ -1080,6 +1123,7 @@ async function showVs() {
   $('vsLine').textContent = boss ? `「${nm(T.bossHi[boss.who][1])}」` : `ギンコ「${T.tips[Math.floor(S.r() * T.tips.length)]}」`;
   $('vsTgt').textContent = target(S.n, S.k).toLocaleString();
   show('s-vs');
+  snap('vs');
 }
 
 // ===== 対局 =====
@@ -1088,10 +1132,16 @@ const cv = $('cv'), ctx = setupCanvas(cv);
 let V = null;
 function startMatch() {
   const boss = curBoss();
-  S.tgt = target(S.n, S.k); S.score = 0;
-  S.balls = BASE_BALLS + S.extraBalls;
-  S.disabled = new Set();
-  if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => S.disabled.add(i));
+  const dis = [];
+  if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => dis.push(i));
+  matchScreen({ score: 0, balls: BASE_BALLS + S.extraBalls, tgt: target(S.n, S.k), disabled: dis });
+  nextTurn();
+}
+// 対局の画面を用意する（はじめから・続きからの両方で使う）
+function matchScreen(m) {
+  const boss = curBoss();
+  S.tgt = m.tgt; S.score = m.score; S.balls = m.balls;
+  S.disabled = new Set(m.disabled);
   S.pk = matchPockets(S.pockets, boss);
   V = { aim: null, floats: [], flash: {}, pflash: {}, t: 0, balls: [], ghost: null };
   const o = curOpp();
@@ -1099,7 +1149,7 @@ function startMatch() {
   $('pNight').textContent = `夜${S.n}・${MATCH_NAME[S.k]}`; $('pTgt').textContent = S.tgt.toLocaleString();
   $('pRule').classList.toggle('hidden', !boss); if (boss) $('pRule').textContent = `${boss.rule}：${boss.rd}`;
   setCalc(0, 1, '-', 0);
-  show('s-play'); hud(); nextTurn();
+  show('s-play'); hud();
 }
 function hud() {
   $('pScore').textContent = S.score.toLocaleString();
@@ -1116,6 +1166,7 @@ function nextTurn() {
   S.phase = 'draft'; S.pending = null; V.ghost = null;
   S.draft = draft(S.r, S.n);
   setHint(''); $('placeBar').classList.add('hidden');
+  snap('play');
   paint(); openDraft();
 }
 function openDraft() {
@@ -1198,6 +1249,8 @@ async function shoot(x) {
         } else if (ev.type === 'pocket') {
           V.pflash[ev.p] = V.t;
           V.floats.push({ x: (ev.p + .5) * W / 7, y: POCKET_Y, text: S.pk[ev.p] ? '×' + S.pk[ev.p] : '締め！', t: V.t, color: S.pk[ev.p] ? '#ffe2a8' : '#ff6b6b', big: true });
+        } else if (ev.type === 'rocket') {
+          V.floats.push({ x: ev.x, y: ev.y, text: '滝のぼり！', t: V.t, color: '#7fd6ff', big: true });
         } else if (ev.type === 'split') {
           V.floats.push({ x: ev.x, y: ev.y, text: '分身！', t: V.t, color: '#9fe08a', big: true });
         }
@@ -1251,6 +1304,7 @@ async function win() {
     store('pachinko-cleared', true);
     S.endless = true;
   }
+  S.rerollCost = 2; rollShop(); snap('shop');   // ここでやめても、屋台から続けられる
   show('s-res');
 }
 async function lose() {
@@ -1258,6 +1312,7 @@ async function lose() {
   const boss = curBoss();
   if (boss) await talk([[boss.who, ...T.bossLose[boss.who]]]);
   if (S.story && S.n <= STORY_NIGHTS) await talk(SCENES.lose[S.n - 1]);
+  clearSave();
   saveBest();
   const where = `${S.endless ? 'エンドレス ' : ''}夜${S.n}・${MATCH_NAME[S.k]}`;
   $('overRec').innerHTML = `縁が足りなかったのは<br><b>${where}</b><br>いちばん大きな一発：<b>${S.best.toLocaleString()}</b> 点`;
@@ -1273,8 +1328,10 @@ function saveBest() {
 
 // ===== 屋台（勝負のあいだ） =====
 const cvS = $('cvShop'), ctxS = setupCanvas(cvS);
-function openShop() {
-  S.rerollCost = 2; S.traySel = null; rollShop();
+function openShop() { enterShop(); }
+function enterShop() {
+  S.traySel = null;
+  if (!S.shop) { S.rerollCost = 2; rollShop(); }
   $('shopFace').src = face('gyosho', 's');
   $('shopSay').textContent = T.shop[Math.floor(S.r() * T.shop.length)];
   show('s-shop'); renderShop();
@@ -1290,6 +1347,7 @@ function rollShop() {
 }
 const POS = ['いちばん左', '左から2番目', '左から3番目', 'まんなか', '右から3番目', '右から2番目', 'いちばん右'];
 function renderShop() {
+  snap('shop');
   $('shopMoney').textContent = S.money;
   $('shopItems').innerHTML = S.shop.map((it, i) => {
     let ic, title, d;
@@ -1334,7 +1392,7 @@ cvS.addEventListener('click', e => {
 });
 function nextMatch() {
   if (S.tray.length && !S._warned) { S._warned = true; $('shopSay').textContent = `手持ちの役物が${S.tray.length}つ、まだ盤に置かれていませんよ。このまま行くなら、もう一度「次へ」を。`; return; }
-  S._warned = false;
+  S._warned = false; S.shop = null;
   S.k++; if (S.k > 2) { S.k = 0; S.n++; } showVs();
 }
 
@@ -1348,7 +1406,11 @@ function title() {
   $('bEndless').disabled = !cleared;
   $('bEndless').innerHTML = cleared ? 'エンドレス<small>十五夜のその先へ。どこまで縁を集められるか</small>' : 'エンドレス<small>🔒 最終話をクリアすると遊べる</small>';
   $('bGallery').classList.toggle('hidden', !Object.keys(store('pachinko-cg') || {}).length);
-  $('bStart').textContent = store('pachinko-seen-scenes') ? 'ストーリーを はじめから' : 'はじめる';
+  const sv = savedRun();
+  $('bContinue').classList.toggle('hidden', !sv);
+  if (sv) $('bContinue').innerHTML = `つづきから<small>${sv.endless ? 'エンドレス ' : ''}夜${sv.n}・${MATCH_NAME[sv.k]}${sv.where === 'shop' ? '（屋台）' : ''}</small>`;
+  $('bStart').textContent = sv ? 'ストーリーを はじめから' : store('pachinko-seen-scenes') ? 'ストーリーを はじめから' : 'はじめる';
+  $('bStart').classList.toggle('red', !sv);
   show('s-title');
 }
 function askName() {
@@ -1373,13 +1435,28 @@ $('bList').onclick = () => listSheet(true);
 $('bListT').onclick = () => listSheet(false);
 $('bHow').onclick = () => sheet(HOW);
 $('bSpeed').onclick = () => { S.speed = S.speed === 1 ? 2 : 1; $('speedLbl').textContent = S.speed === 1 ? 'ふつう' : 'はやい'; };
+$('bContinue').onclick = resume;
 $('bStart').onclick = async () => {
+  if (savedRun() && !(await confirmSheet('いまの続きは消えます。はじめから遊びますか？'))) return;
   if (!store('pachinko-name')) await askName();
   newRun(true);
   await scene('prologue');
   showVs();
 };
-$('bEndless').onclick = () => { newRun(false); showVs(); };
+$('bEndless').onclick = async () => {
+  if (savedRun() && !(await confirmSheet('いまの続きは消えます。エンドレスをはじめますか？'))) return;
+  newRun(false); showVs();
+};
+// はい／いいえを聞く（ブラウザの確認ダイアログは使えないので、自前で）
+function confirmSheet(msg) {
+  return new Promise(done => {
+    const el = document.createElement('div'); el.className = 'sheet';
+    el.innerHTML = `<div class="in px"><h3>${esc(msg)}</h3><div class="row2" style="grid-template-columns:1fr 1fr"><button class="btn" data-n>やめる</button><button class="btn red" data-y>はい</button></div></div>`;
+    el.querySelector('[data-y]').onclick = () => { el.remove(); done(true); };
+    el.querySelector('[data-n]').onclick = () => { el.remove(); done(false); };
+    $('layer').appendChild(el);
+  });
+}
 $('bFight').onclick = startMatch;
 $('bToShop').onclick = openShop;
 $('bReroll').onclick = () => { if (S.money < S.rerollCost) return; S.money -= S.rerollCost; S.rerollCost++; rollShop(); renderShop(); };

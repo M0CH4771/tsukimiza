@@ -146,7 +146,7 @@ function itemRow(k, extra = '') { const Y = YAKUMONO[k]; return `<div class="ite
 function listSheet(onlyBoard) {
   const keys = onlyBoard ? [...new Set(S.board.filter(Boolean).map(o => o.k))] : YAKUMONO_KEYS;
   sheet(`<h3>${onlyBoard ? '盤にある役物' : '役物の一覧'}</h3>${keys.map(k => itemRow(k)).join('')}
-    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">ただの釘に当たると 文＋${NAIL_MON}。<br>点 ＝ 文 × 倍率 × 入賞口の倍率（玉が分かれたら、入った入賞口の倍率を足し算）</p>`);
+    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">ただの釘に当たると 文＋${NAIL_MON}。<br>点 ＝ 文 × 倍率 × 入賞口の倍率（玉が分かれたら、入ったうちで いちばん高い入賞口の倍率）</p>`);
 }
 function moonSVG(p) {
   // p: 0〜1（光っている割合）。右から満ちていく
@@ -241,13 +241,41 @@ let S = null;
 function newRun(story) {
   const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
   S = { seed, r: rng(seed), n: 1, k: 0, money: 4, board: newBoard(), pockets: POCKETS_START.slice(), tray: [], extraBalls: 0, best: 0, story, endless: !story, speed: S ? S.speed : 1, name: playerName() };
+  clearSave();
+}
+
+// ===== セーブ（続きから遊ぶ） =====
+// 区切りごとに、そこから再開できるだけの情報をブラウザに保存する
+//   vs：相手の紹介の画面／play：手番のはじめ（役物えらび）／shop：藁人の屋台
+const SAVE_KEY = 'tsukimiza-save';
+function snap(where) {
+  if (!S) return;
+  store(SAVE_KEY, {
+    v: 1, where, at: Date.now(),
+    n: S.n, k: S.k, money: S.money, board: S.board, pockets: S.pockets, tray: S.tray, extraBalls: S.extraBalls,
+    best: S.best, story: S.story, endless: S.endless, seed: S.seed, rs: S.r.get(), speed: S.speed,
+    shop: where === 'shop' ? S.shop : null, rerollCost: S.rerollCost,
+    play: where === 'play' ? { score: S.score, balls: S.balls, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft } : null,
+  });
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+function savedRun() { const d = store(SAVE_KEY); return d && d.v === 1 ? d : null; }
+function resume() {
+  const d = savedRun(); if (!d) return;
+  S = { seed: d.seed, r: rng(d.seed), n: d.n, k: d.k, money: d.money, board: d.board, pockets: d.pockets, tray: d.tray || [], extraBalls: d.extraBalls,
+    best: d.best || 0, story: d.story, endless: d.endless, speed: d.speed || 1, name: playerName(), rerollCost: d.rerollCost || 2 };
+  S.r.set(d.rs);
+  $('speedLbl').textContent = S.speed === 1 ? 'ふつう' : 'はやい';
+  if (d.where === 'shop' && d.shop) { S.shop = d.shop; enterShop(); return; }
+  if (d.where === 'play' && d.play) { matchScreen(d.play); S.phase = 'draft'; S.draft = d.play.draft; setHint(''); paint(); openDraft(); return; }
+  showVs(true);
 }
 function curOpp() { return opponent(S.n, S.k); }
 function curBoss() { return S.k === 2 ? curOpp() : null; }
 function oppFace(o, big) { return o.who ? `<img src="${face(o.who, 'n')}" alt="">` : spr(o.s, big ? '110px' : '38px'); }
 
-async function showVs() {
-  const ns = S.story && S.n <= STORY_NIGHTS ? NIGHT_SCENES[S.n - 1] : null;
+async function showVs(skipScenes) {
+  const ns = !skipScenes && S.story && S.n <= STORY_NIGHTS ? NIGHT_SCENES[S.n - 1] : null;
   if (ns && S.k === 0) await scene(ns.intro);
   if (ns && S.k === 2) await scene(ns.mid);
   const o = curOpp(), boss = curBoss();
@@ -261,6 +289,7 @@ async function showVs() {
   $('vsLine').textContent = boss ? `「${nm(T.bossHi[boss.who][1])}」` : `ギンコ「${T.tips[Math.floor(S.r() * T.tips.length)]}」`;
   $('vsTgt').textContent = target(S.n, S.k).toLocaleString();
   show('s-vs');
+  snap('vs');
 }
 
 // ===== 対局 =====
@@ -269,10 +298,16 @@ const cv = $('cv'), ctx = setupCanvas(cv);
 let V = null;
 function startMatch() {
   const boss = curBoss();
-  S.tgt = target(S.n, S.k); S.score = 0;
-  S.balls = BASE_BALLS + S.extraBalls;
-  S.disabled = new Set();
-  if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => S.disabled.add(i));
+  const dis = [];
+  if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => dis.push(i));
+  matchScreen({ score: 0, balls: BASE_BALLS + S.extraBalls, tgt: target(S.n, S.k), disabled: dis });
+  nextTurn();
+}
+// 対局の画面を用意する（はじめから・続きからの両方で使う）
+function matchScreen(m) {
+  const boss = curBoss();
+  S.tgt = m.tgt; S.score = m.score; S.balls = m.balls;
+  S.disabled = new Set(m.disabled);
   S.pk = matchPockets(S.pockets, boss);
   V = { aim: null, floats: [], flash: {}, pflash: {}, t: 0, balls: [], ghost: null };
   const o = curOpp();
@@ -280,7 +315,7 @@ function startMatch() {
   $('pNight').textContent = `夜${S.n}・${MATCH_NAME[S.k]}`; $('pTgt').textContent = S.tgt.toLocaleString();
   $('pRule').classList.toggle('hidden', !boss); if (boss) $('pRule').textContent = `${boss.rule}：${boss.rd}`;
   setCalc(0, 1, '-', 0);
-  show('s-play'); hud(); nextTurn();
+  show('s-play'); hud();
 }
 function hud() {
   $('pScore').textContent = S.score.toLocaleString();
@@ -297,6 +332,7 @@ function nextTurn() {
   S.phase = 'draft'; S.pending = null; V.ghost = null;
   S.draft = draft(S.r, S.n);
   setHint(''); $('placeBar').classList.add('hidden');
+  snap('play');
   paint(); openDraft();
 }
 function openDraft() {
@@ -379,6 +415,8 @@ async function shoot(x) {
         } else if (ev.type === 'pocket') {
           V.pflash[ev.p] = V.t;
           V.floats.push({ x: (ev.p + .5) * W / 7, y: POCKET_Y, text: S.pk[ev.p] ? '×' + S.pk[ev.p] : '締め！', t: V.t, color: S.pk[ev.p] ? '#ffe2a8' : '#ff6b6b', big: true });
+        } else if (ev.type === 'rocket') {
+          V.floats.push({ x: ev.x, y: ev.y, text: '滝のぼり！', t: V.t, color: '#7fd6ff', big: true });
         } else if (ev.type === 'split') {
           V.floats.push({ x: ev.x, y: ev.y, text: '分身！', t: V.t, color: '#9fe08a', big: true });
         }
@@ -432,6 +470,7 @@ async function win() {
     store('pachinko-cleared', true);
     S.endless = true;
   }
+  S.rerollCost = 2; rollShop(); snap('shop');   // ここでやめても、屋台から続けられる
   show('s-res');
 }
 async function lose() {
@@ -439,6 +478,7 @@ async function lose() {
   const boss = curBoss();
   if (boss) await talk([[boss.who, ...T.bossLose[boss.who]]]);
   if (S.story && S.n <= STORY_NIGHTS) await talk(SCENES.lose[S.n - 1]);
+  clearSave();
   saveBest();
   const where = `${S.endless ? 'エンドレス ' : ''}夜${S.n}・${MATCH_NAME[S.k]}`;
   $('overRec').innerHTML = `縁が足りなかったのは<br><b>${where}</b><br>いちばん大きな一発：<b>${S.best.toLocaleString()}</b> 点`;
@@ -454,8 +494,10 @@ function saveBest() {
 
 // ===== 屋台（勝負のあいだ） =====
 const cvS = $('cvShop'), ctxS = setupCanvas(cvS);
-function openShop() {
-  S.rerollCost = 2; S.traySel = null; rollShop();
+function openShop() { enterShop(); }
+function enterShop() {
+  S.traySel = null;
+  if (!S.shop) { S.rerollCost = 2; rollShop(); }
   $('shopFace').src = face('gyosho', 's');
   $('shopSay').textContent = T.shop[Math.floor(S.r() * T.shop.length)];
   show('s-shop'); renderShop();
@@ -471,6 +513,7 @@ function rollShop() {
 }
 const POS = ['いちばん左', '左から2番目', '左から3番目', 'まんなか', '右から3番目', '右から2番目', 'いちばん右'];
 function renderShop() {
+  snap('shop');
   $('shopMoney').textContent = S.money;
   $('shopItems').innerHTML = S.shop.map((it, i) => {
     let ic, title, d;
@@ -515,7 +558,7 @@ cvS.addEventListener('click', e => {
 });
 function nextMatch() {
   if (S.tray.length && !S._warned) { S._warned = true; $('shopSay').textContent = `手持ちの役物が${S.tray.length}つ、まだ盤に置かれていませんよ。このまま行くなら、もう一度「次へ」を。`; return; }
-  S._warned = false;
+  S._warned = false; S.shop = null;
   S.k++; if (S.k > 2) { S.k = 0; S.n++; } showVs();
 }
 
@@ -529,7 +572,11 @@ function title() {
   $('bEndless').disabled = !cleared;
   $('bEndless').innerHTML = cleared ? 'エンドレス<small>十五夜のその先へ。どこまで縁を集められるか</small>' : 'エンドレス<small>🔒 最終話をクリアすると遊べる</small>';
   $('bGallery').classList.toggle('hidden', !Object.keys(store('pachinko-cg') || {}).length);
-  $('bStart').textContent = store('pachinko-seen-scenes') ? 'ストーリーを はじめから' : 'はじめる';
+  const sv = savedRun();
+  $('bContinue').classList.toggle('hidden', !sv);
+  if (sv) $('bContinue').innerHTML = `つづきから<small>${sv.endless ? 'エンドレス ' : ''}夜${sv.n}・${MATCH_NAME[sv.k]}${sv.where === 'shop' ? '（屋台）' : ''}</small>`;
+  $('bStart').textContent = sv ? 'ストーリーを はじめから' : store('pachinko-seen-scenes') ? 'ストーリーを はじめから' : 'はじめる';
+  $('bStart').classList.toggle('red', !sv);
   show('s-title');
 }
 function askName() {
@@ -554,13 +601,28 @@ $('bList').onclick = () => listSheet(true);
 $('bListT').onclick = () => listSheet(false);
 $('bHow').onclick = () => sheet(HOW);
 $('bSpeed').onclick = () => { S.speed = S.speed === 1 ? 2 : 1; $('speedLbl').textContent = S.speed === 1 ? 'ふつう' : 'はやい'; };
+$('bContinue').onclick = resume;
 $('bStart').onclick = async () => {
+  if (savedRun() && !(await confirmSheet('いまの続きは消えます。はじめから遊びますか？'))) return;
   if (!store('pachinko-name')) await askName();
   newRun(true);
   await scene('prologue');
   showVs();
 };
-$('bEndless').onclick = () => { newRun(false); showVs(); };
+$('bEndless').onclick = async () => {
+  if (savedRun() && !(await confirmSheet('いまの続きは消えます。エンドレスをはじめますか？'))) return;
+  newRun(false); showVs();
+};
+// はい／いいえを聞く（ブラウザの確認ダイアログは使えないので、自前で）
+function confirmSheet(msg) {
+  return new Promise(done => {
+    const el = document.createElement('div'); el.className = 'sheet';
+    el.innerHTML = `<div class="in px"><h3>${esc(msg)}</h3><div class="row2" style="grid-template-columns:1fr 1fr"><button class="btn" data-n>やめる</button><button class="btn red" data-y>はい</button></div></div>`;
+    el.querySelector('[data-y]').onclick = () => { el.remove(); done(true); };
+    el.querySelector('[data-n]').onclick = () => { el.remove(); done(false); };
+    $('layer').appendChild(el);
+  });
+}
 $('bFight').onclick = startMatch;
 $('bToShop').onclick = openShop;
 $('bReroll').onclick = () => { if (S.money < S.rerollCost) return; S.money -= S.rerollCost; S.rerollCost++; rollShop(); renderShop(); };
