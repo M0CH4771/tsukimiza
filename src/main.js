@@ -81,9 +81,27 @@ function face(who, f) {
   return BUSTS[`${who}_${f || 'n'}`] || BUSTS[`${who}_n`];
 }
 function nm(t) { return String(t).replace(/\{name\}/g, S && S.name ? S.name : playerName()); }
+// 対局の盤を、画面の高さに合わせる（盤と下の数字まで、スクロールなしで1画面に入るように）
+// iPhoneのSafariは、下のアドレスバーが画面の上にかぶるので、その分をあけておく
+const IOS_BAR = /iPhone|iPod/.test(navigator.userAgent) && !navigator.standalone && !window.matchMedia('(display-mode: standalone)').matches ? 76 : 0;
+function fitBoard() {
+  const play = $('s-play'); if (play.classList.contains('hidden')) return;
+  const wrap = cv.parentElement, calc = play.querySelector('.calc');
+  wrap.style.width = ''; cv.style.width = '';
+  const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  const top = wrap.getBoundingClientRect().top + 3;
+  const below = calc.offsetHeight + 8 + 3 + IOS_BAR + 6;
+  const maxW = play.clientWidth - 6;
+  const w = Math.max(220, Math.min(maxW, (vh - top - below) * W / H));
+  cv.style.width = Math.floor(w) + 'px'; wrap.style.width = Math.floor(w) + 6 + 'px';
+}
+window.addEventListener('resize', fitBoard);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', fitBoard);
 function show(id) {
+  document.body.classList.toggle('playing', id === 's-play');
   if (id !== 's-play') { const d = document.getElementById('draftPanel'); if (d) d.remove(); }   // 役物えらびの窓は、対局の画面でだけ出す
   ['s-title', 's-vs', 's-play', 's-res', 's-shop', 's-over'].forEach(s => $(s).classList.toggle('hidden', s !== id)); window.scrollTo(0, 0);
+  if (id === 's-play') fitBoard();
 }
 function sheet(html) {
   const el = document.createElement('div'); el.className = 'sheet';

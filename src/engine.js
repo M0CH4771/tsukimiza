@@ -6,22 +6,23 @@
 // ただし「1回の落としで1回だけ」の役物（once）もある（花火など、玉ごとに出ると強すぎるもの）。
 // 盤に一度に出る玉は MAX_ALIVE こまで。それをこえた分は、生まれた役物の下から順番に こぼれ落ちる（1つも捨てない）。
 
-const W = 360, H = 580;
+const W = 360, H = 512;   // 釘は7段（スマホで盤と下の数字まで1画面に入るように）
 const BALL_R = 6, NAIL_R = 4, ITEM_R = 9;
 const MIN_IMPACT = 40;   // 当たりは、玉がちゃんとぶつかったとき（速さ40以上）だけ。時間切れはない（最後の1こが入るまで）
-const POCKET_Y = 516;
+const ROWS_N = 7, ROW0 = 100, ROW_GAP = 50;   // 釘の段：7段、いちばん上の段の高さ、段の間
+const POCKET_Y = 452;
 const GRAVITY = 760, MAX_V = 720;
 const MAX_ALIVE = 2500;  // 盤に一度に出る玉の数（スマホで動かせる目安）
 const COOLDOWN = .3;     // 生まれた玉が、生まれた役物にすぐ当たらないための間
 const DROP_GAP = .15;    // 手玉を全部落とすときの、1つずつの間
 const WAIT_PER_STEP = 12;   // 順番待ちの玉を、1こまに何こまで出すか（1秒に1440こ）
 
-// 釘の位置：8段、偶数段は7本、奇数段は6本（ずらして並べる）
+// 釘の位置：7段、偶数段は7本、奇数段は6本（ずらして並べる）
 const SLOTS = [];
-for (let row = 0; row < 8; row++) {
+for (let row = 0; row < ROWS_N; row++) {
   const n = row % 2 ? 6 : 7;
   for (let col = 0; col < n; col++) {
-    SLOTS.push({ row, col, x: (row % 2 ? 55 : 30) + col * 50, y: 112 + row * 50 });
+    SLOTS.push({ row, col, x: (row % 2 ? 55 : 30) + col * 50, y: ROW0 + row * ROW_GAP });
   }
 }
 // となり（上下左右ななめ）
@@ -102,7 +103,7 @@ const BOSSES = [
   { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。左はしと右はしの入賞口2つずつに入った玉は数えない', fx: 'shime' },
 ];
 const MINIONS = [];
-const NIGHT_BASE = [20, 100, 700, 5000, 40000];   // ためる縁
+const NIGHT_BASE = [18, 100, 700, 5000, 40000];   // ためる縁
 const STORY_NIGHTS = 5;
 const MATCH_MULT = [1, 1.7, 2.5];
 const PICKS = 2;   // 1回の勝負で、役物をえらんで置ける回数（そのあと手玉を全部落とす）
@@ -225,8 +226,8 @@ function stepShot(s, dt) {
     if (ball.x > W - BALL_R) { ball.x = W - BALL_R; ball.vx = -Math.abs(ball.vx) * .6; }
     if (ball.y < BALL_R) { ball.y = BALL_R; ball.vy = Math.abs(ball.vy) * .5; }
     if (!ball.rocket) {
-      const row = Math.round((ball.y - 112) / 50);
-      if (row >= 0 && row < 8 && Math.abs(112 + row * 50 - ball.y) <= 24) {
+      const row = Math.round((ball.y - ROW0) / ROW_GAP);
+      if (row >= 0 && row < ROWS_N && Math.abs(ROW0 + row * ROW_GAP - ball.y) <= 24) {
         const ids = ROWS[row];
         for (let q = 0; q < ids.length; q++) {
           const i = ids[q], sl = SLOTS[i];
