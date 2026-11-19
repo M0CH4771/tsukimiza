@@ -23,7 +23,7 @@ const T = {
     tetsu: ['x', '……まだだ。'],
   },
   // 宵・夜ふけに、ギンコが言うこと
-  tips: ['今夜もじゃらじゃら打とう！', '役物は、自分と同じ色の玉が当たったときだけふえるよ。手玉に多い色の役物を育てよう！', '玉はぜんぶ同じところから落ちるよ。役物が縦にならんだ列をねらうと強い！', 'だんごは、だんごのとなり！ ひとつだけだと ふえないよ。', '金魚は当たった勝負ごとに育つの。早めに置くのがおすすめ！', '染めの鈴で玉の色をそろえると、同じ色の役物が続けて反応するよ。', '桜は、ふえた玉の色を変えるよ。赤の桜の下に青の役物を置くと、つながる！', '小判に当たると縁銭がもらえるよ。玉袋を買うのに使おう。', 'おコンの算盤は、盤に同じ色の役物が多いほど強くなるよ。'],
+  tips: ['今夜もじゃらじゃら打とう！', '玉はぜんぶ同じところから落ちるよ。役物が縦にならんだ列をねらうと強い！', 'だんごは、だんごのとなり！ ひとつだけだと ふえないよ。', '太鼓の真下の入賞口は、玉が当たるたびに倍率が上がるの。玉がたくさん通るところに置こう！', '金魚は、玉が当たった勝負のあと、真下の入賞口をずっと育ててくれるよ。', '寄せ磁石は、玉をまんなかの入賞口へ寄せるよ。', '小判に当たると縁銭がもらえるよ。玉袋を買うのに使おう。', 'おコンの算盤は、盤にいろんな種類の役物があるほど強くなるよ。'],
   shop: ['まいど。月見座の前に、屋台を出させてもらいました。', '今夜もよい品がそろっております。', 'お代は縁銭で。安くはありませんよ。'],
   bought: ['お目が高い。', 'まいど。よい場所に置いてやってください。', 'それは、よく当たりますよ。'],
 };
@@ -145,23 +145,16 @@ function gallery() {
 }
 async function scene(key) { const sc = SCENES[key]; if (!sc) return; await talk(sc); const seen = store('pachinko-seen-scenes') || {}; seen[key] = 1; store('pachinko-seen-scenes', seen); }
 
-// 色の見た目
-const NIJI_GRAD = 'linear-gradient(90deg,#e8453c,#f2c94e,#4cbf5a,#3a8ee8,#a35ad8)';
-function colorCss(c) { return c === NIJI || c === ANY ? NIJI_GRAD : COLORS[c].c; }
-function colorChip(c) { return `<span class="cchip" style="background:${colorCss(c)}"></span>${colorName(c)}`; }
-function pieceIcon(o, size) { return `<span class="picon" style="--pc:${colorCss(o.c)}">${spr(YAKUMONO[o.k].s, size)}</span>`; }
-// o は {k, c}（色つき）か、役物の名前だけ
+function pieceIcon(o, size) { return spr(YAKUMONO[o.k].s, size); }
+// o は {k} か、役物の名前だけ
 function itemRow(o, extra = '') {
-  if (typeof o === 'string') o = { k: o, c: YAKUMONO[o].any ? ANY : null };
-  const Y = YAKUMONO[o.k];
-  const title = o.c == null ? Y.n : pieceName(o);
-  const col = o.c == null ? '<span class="cchip" style="background:' + NIJI_GRAD + '"></span>色は置くときに決まる' : colorChip(o.c);
-  return `<div class="item px"><div class="ic">${o.c == null ? spr(Y.s, '40px') : pieceIcon(o, '40px')}</div><div class="tx"><b>${title}</b><span style="color:${['#cfc6e2', '#7fb6ef', '#f2c14e'][Y.r]}">［${RARITY_NAME[Y.r]}］</span>${col}<br>${Y.d}${extra}</div></div>`;
+  const k = typeof o === 'string' ? o : o.k, Y = YAKUMONO[k];
+  return `<div class="item px"><div class="ic">${spr(Y.s, '40px')}</div><div class="tx"><b>${Y.n}</b><span style="color:${['#cfc6e2', '#7fb6ef', '#f2c14e'][Y.r]}">［${RARITY_NAME[Y.r]}］</span><br>${Y.d}${extra}</div></div>`;
 }
 function listSheet(onlyBoard) {
-  const keys = onlyBoard ? S.board.filter(Boolean).filter((o, i, a) => a.findIndex(x => x.k === o.k && x.c === o.c) === i) : YAKUMONO_KEYS;
+  const keys = onlyBoard ? [...new Set(S.board.filter(Boolean).map(o => o.k))] : YAKUMONO_KEYS;
   sheet(`<h3>${onlyBoard ? '盤にある役物' : '役物の一覧'}</h3>${keys.map(k => itemRow(k)).join('')}
-    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉の数（×3の入賞口なら3つ分）。<br>役物は、自分と同じ色の玉が当たるとふえる（「どの色でも」の役物もある）。虹の玉は、どの色の役物にも反応する。虹の玉から分かれた玉は、その役物の色になる。<br>1つの玉は同じ役物で1回だけ。分かれた玉は新しい玉なので、下の役物でまたふえる。</p>`);
+    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉 × その入賞口の倍率。<br>1つの玉は同じ役物で1回だけ（葉っぱは何回でも）。分かれた玉は新しい玉なので、下の役物でまたふえる。<br>盤に一度に出る玉は${MAX_ALIVE}こまで。こえた分は役物の下で順番を待って、こぼれ落ちる。</p>`);
 }
 function moonSVG(p) {
   // p: 0〜1（光っている割合）。右から満ちていく
@@ -178,19 +171,16 @@ function drawSprite(c, k, x, y, size) {
   const i = SHEET_IDX[k]; if (i == null || !SHEET.complete) return;
   c.drawImage(SHEET, (i % 16) * 32, Math.floor(i / 16) * 32, 32, 32, x - size / 2, y - size / 2, size, size);
 }
-function ringStyle(c, col, x, y) {
-  if (col !== ANY && col !== NIJI) return COLORS[col].c;
-  const g = c.createConicGradient ? c.createConicGradient(0, x, y) : null;
-  if (!g) return '#ffffff';
-  ['#e8453c', '#f2c94e', '#4cbf5a', '#3a8ee8', '#a35ad8', '#e8453c'].forEach((h, i) => g.addColorStop(i / 5, h));
-  return g;
-}
-function ballStyle(c, b) {
-  if (b.color === NIJI) return ringStyle(c, NIJI, b.x, b.y);
-  const rg = c.createRadialGradient(b.x - 2, b.y - 3, 1, b.x, b.y, BALL_R);
-  rg.addColorStop(0, '#ffffff'); rg.addColorStop(.35, COLORS[b.color].c); rg.addColorStop(1, '#1d1424');
-  return rg;
-}
+// 白い玉（1回だけ描いて、あとは使いまわす）
+const BALL_IMG = (() => {
+  const d = BALL_R * 2 + 2, cv2 = document.createElement('canvas'); cv2.width = cv2.height = d * 2;
+  const g = cv2.getContext('2d'); g.scale(2, 2);
+  const rg = g.createRadialGradient(d / 2 - 2, d / 2 - 2, 1, d / 2, d / 2, BALL_R);
+  rg.addColorStop(0, '#ffffff'); rg.addColorStop(.55, '#dcd8e6'); rg.addColorStop(1, '#7a7490');
+  g.fillStyle = rg; g.beginPath(); g.arc(d / 2, d / 2, BALL_R, 0, Math.PI * 2); g.fill();
+  return { img: cv2, d };
+})();
+function drawBall(c, x, y) { c.drawImage(BALL_IMG.img, x - BALL_IMG.d / 2, y - BALL_IMG.d / 2, BALL_IMG.d, BALL_IMG.d); }
 function drawBoard(c, o) {
   const g = c.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#3a1c3a'); g.addColorStop(1, '#1d1028');
@@ -209,10 +199,9 @@ function drawBoard(c, o) {
     if (it && !dis) {
       c.fillStyle = fl ? `rgba(255,226,168,${.35 + fl * .5})` : '#00000055';
       c.beginPath(); c.arc(s.x, s.y, ITEM_R + 3 + fl * 4, 0, Math.PI * 2); c.fill();
-      c.strokeStyle = ringStyle(c, it.c, s.x, s.y); c.lineWidth = YAKUMONO[it.k].r === 2 ? 4 : 3;
+      c.strokeStyle = ['#f2c14e', '#7fb6ef', '#ffe2a8'][YAKUMONO[it.k].r]; c.lineWidth = YAKUMONO[it.k].r === 2 ? 3 : 2;
       c.beginPath(); c.arc(s.x, s.y, ITEM_R + 3, 0, Math.PI * 2); c.stroke();
       drawSprite(c, YAKUMONO[it.k].s, s.x, s.y, 21 + fl * 6);
-      if (it.k === 'kingyo') { c.fillStyle = '#ffe2a8'; c.font = '10px DotGothic16, monospace'; c.textAlign = 'center'; c.fillText('+' + YAKUMONO.kingyo.add(it), s.x + 10, s.y + 16); }
     } else if (it && dis) {
       c.fillStyle = '#2f6b2a'; c.beginPath(); c.arc(s.x, s.y, 9, 0, Math.PI * 2); c.fill();
       c.fillStyle = '#9fe08a'; c.font = '12px DotGothic16, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('葉', s.x, s.y + 1); c.textBaseline = 'alphabetic';
@@ -226,30 +215,27 @@ function drawBoard(c, o) {
     }
   });
   if (o.ghost != null) { const s = SLOTS[o.ghost]; c.globalAlpha = .7; drawSprite(c, YAKUMONO[o.ghostK.k].s, s.x, s.y, 24); c.globalAlpha = 1; }
-  const pw = W / 7;
-  for (let p = 0; p < 7; p++) {
+  const pw = W / NP;
+  for (let p = 0; p < NP; p++) {
     const x = p * pw, m = o.pockets[p];
     const fl = o.pflash && o.pflash[p] != null ? Math.max(0, 1 - (o.t - o.pflash[p]) / .6) : 0;
-    c.fillStyle = fl ? `rgba(242,193,78,${.4 + fl * .5})` : (m === 0 ? '#111' : m >= 3 ? '#6e2620' : m >= 2 ? '#4a2a5a' : '#2a1d3a');
+    c.fillStyle = m === 0 ? '#111' : m >= 10 ? '#8a3a10' : m >= 3 ? '#6e2620' : m >= 2 ? '#4a2a5a' : '#2a1d3a';
     c.fillRect(x + 2, POCKET_Y, pw - 4, H - POCKET_Y - 4);
+    if (fl) { c.fillStyle = `rgba(242,193,78,${fl * .35})`; c.fillRect(x + 2, POCKET_Y, pw - 4, H - POCKET_Y - 4); }   // 倍率が上がった
+    if (o.plast && o.plast[p] != null && o.t - o.plast[p] < .12) { c.fillStyle = '#fff3c4'; c.fillRect(x + 2, POCKET_Y, pw - 4, 3); }   // 玉が入った
     c.fillStyle = '#0b0812'; c.fillRect(x - 2, POCKET_Y - 8, 4, H - POCKET_Y + 8);
-    c.fillStyle = m === 0 ? '#ff6b6b' : m >= 3 ? '#ffe2a8' : '#f3e9d2'; c.font = `${m >= 3 ? 20 : 17}px DotGothic16, monospace`; c.textAlign = 'center';
-    c.fillText(m === 0 ? '締' : '×' + m, x + pw / 2, POCKET_Y + 38);
+    const txt = m === 0 ? '締' : '×' + (m >= 10000 ? Math.floor(m / 1000) + 'k' : m);
+    c.fillStyle = m === 0 ? '#ff6b6b' : m >= 3 ? '#ffe2a8' : '#f3e9d2'; c.font = `${txt.length > 4 ? 10 : txt.length > 3 ? 12 : 14}px DotGothic16, monospace`; c.textAlign = 'center';
+    c.fillText(txt, x + pw / 2, POCKET_Y + 36);
   }
   if (o.aim != null) {
     c.strokeStyle = '#ffe2a8aa'; c.setLineDash([4, 5]); c.lineWidth = 1.5;
     c.beginPath(); c.moveTo(o.aim, 34); c.lineTo(o.aim, 100); c.stroke(); c.setLineDash([]);
-    c.fillStyle = ballStyle(c, { x: o.aim, y: 34, color: o.next == null ? 0 : o.next }); c.beginPath(); c.arc(o.aim, 34, BALL_R, 0, Math.PI * 2); c.fill();
+    drawBall(c, o.aim, 34);
     c.fillStyle = '#ffe2a8'; c.beginPath(); c.moveTo(o.aim - 7, 14); c.lineTo(o.aim + 7, 14); c.lineTo(o.aim, 22); c.fill();
   }
-  (o.balls || []).forEach(b => {
-    if (!b.alive) return;
-    c.fillStyle = ballStyle(c, b); c.beginPath(); c.arc(b.x, b.y, BALL_R, 0, Math.PI * 2); c.fill();
-    if (b.w > 1) {   // 盤がいっぱいのときに乗った分（×何こ分）
-      c.font = '9px DotGothic16, monospace'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = '#0b0812';
-      c.strokeText('×' + b.w, b.x, b.y - BALL_R - 2); c.fillStyle = '#fff3c4'; c.fillText('×' + b.w, b.x, b.y - BALL_R - 2);
-    }
-  });
+  const bs = o.balls || [];
+  for (let q = 0; q < bs.length; q++) if (bs[q].alive) drawBall(c, bs[q].x, bs[q].y);
   (o.floats || []).forEach(f => {
     const a = Math.max(0, 1 - (o.t - f.t) / .9); if (!a) return;
     c.globalAlpha = a; c.font = `${f.big ? 16 : 12}px DotGothic16, monospace`; c.textAlign = 'center';
@@ -281,15 +267,15 @@ const SAVE_KEY = 'tsukimiza-save';
 function snap(where) {
   if (!S) return;
   store(SAVE_KEY, {
-    v: 3, where, at: Date.now(),
+    v: 4, where, at: Date.now(),
     n: S.n, k: S.k, money: S.money, board: S.board, pockets: S.pockets, tray: S.tray, extraBalls: S.extraBalls,
     best: S.best, story: S.story, endless: S.endless, seed: S.seed, rs: S.r.get(), speed: S.speed,
     shop: where === 'shop' ? S.shop : null, rerollCost: S.rerollCost,
-    play: where === 'play' ? { score: S.score, hand: S.hand, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft, picks: S.picks } : null,
+    play: where === 'play' ? { score: S.score, hand: S.hand, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft, picks: S.picks } : null,   // hand：手玉の数
   });
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
-function savedRun() { const d = store(SAVE_KEY); return d && d.v === 3 ? d : null; }   // 「全部いっぺんに落とす」ルールより前のセーブは使わない
+function savedRun() { const d = store(SAVE_KEY); return d && d.v === 4 ? d : null; }   // 白い玉・入賞口11こ のルールより前のセーブは使わない
 function resume() {
   const d = savedRun(); if (!d) return;
   S = { seed: d.seed, r: rng(d.seed), n: d.n, k: d.k, money: d.money, board: d.board, pockets: d.pockets, tray: d.tray || [], extraBalls: d.extraBalls,
@@ -330,14 +316,14 @@ function startMatch() {
   const boss = curBoss();
   const dis = [];
   if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => dis.push(i));
-  matchScreen({ score: 0, hand: makeHand(S.r, S.extraBalls, boss), tgt: target(S.n, S.k), disabled: dis });
+  matchScreen({ score: 0, hand: handSize(S.extraBalls), tgt: target(S.n, S.k), disabled: dis });
   S.picks = PICKS;
   nextTurn();
 }
 // 対局の画面を用意する（はじめから・続きからの両方で使う）
 function matchScreen(m) {
   const boss = curBoss();
-  S.tgt = m.tgt; S.score = m.score; S.hand = m.hand.slice(); S.balls = S.hand.length;
+  S.tgt = m.tgt; S.score = m.score; S.hand = m.hand; S.balls = S.hand;
   S.disabled = new Set(m.disabled);
   S.pk = matchPockets(S.pockets, boss);
   V = { aim: null, floats: [], flash: {}, pflash: {}, t: 0, balls: [], ghost: null };
@@ -351,13 +337,13 @@ function matchScreen(m) {
 function hud() {
   $('pScore').textContent = S.score.toLocaleString();
   $('pBar').style.width = Math.min(100, S.score / S.tgt * 100) + '%';
-  $('pBalls').innerHTML = S.hand.length ? S.hand.map(c => `<i class="hb" style="background:${colorCss(c)}"></i>`).join('') : '0';
+  $('pBalls').textContent = S.hand;
   $('pMoney').textContent = S.money;
 }
 // 下の数字：盤の上の玉／入った玉の数／縁（入賞口の倍率をかけた数）
 function setCalc(alive, landed, tot) { $('cMon').textContent = alive.toLocaleString(); $('cMul').textContent = landed.toLocaleString(); $('cTot').textContent = tot.toLocaleString(); }
 function paint() {
-  drawBoard(ctx, { board: S.board, pockets: S.pk, disabled: S.disabled, block: curBoss() && curBoss().fx === 'block', balls: V.balls, floats: V.floats, aim: V.aim, next: S.hand && S.hand[0], flash: V.flash, pflash: V.pflash, t: V.t, sel: S.phase === 'place', ghost: V.ghost, ghostK: S.pending });
+  drawBoard(ctx, { board: S.board, pockets: V.pk || S.pk, disabled: S.disabled, block: curBoss() && curBoss().fx === 'block', balls: V.balls, floats: V.floats, aim: V.aim, flash: V.flash, pflash: V.pflash, plast: V.plast, t: V.t, sel: S.phase === 'place', ghost: V.ghost, ghostK: S.pending });
 }
 function setHint(t) { $('hint').innerHTML = t; $('hint').classList.toggle('hidden', !t); }
 function nextTurn() {
@@ -370,11 +356,9 @@ function nextTurn() {
 function openDraft() {
   closeDraft();
   const el = document.createElement('div'); el.className = 'draft'; el.id = 'draftPanel';
-  const cnt = COLORS.map((c, i) => S.hand.filter(x => x === i).length), nj = S.hand.filter(x => x === NIJI).length;
-  const handTxt = COLORS.map((c, i) => cnt[i] ? `${colorChip(i)}${cnt[i]}` : '').join(' ') + (nj ? ` ${colorChip(NIJI)}${nj}` : '');
-  el.innerHTML = `<div class="in px"><h4>役物をえらんで置く（あと${S.picks}回）<br><small>手玉 ${handTxt}</small></h4><div class="opts">${S.draft.map((o, i) => {
+  el.innerHTML = `<div class="in px"><h4>役物をえらんで置く（あと${S.picks}回）<br><small>置きおわったら 手玉${S.hand}こを全部落とす</small></h4><div class="opts">${S.draft.map((o, i) => {
     const Y = YAKUMONO[o.k];
-    return `<button class="opt r${Y.r}" data-i="${i}">${pieceIcon(o, '40px')}<span class="rr">${RARITY_NAME[Y.r]}</span><span class="on">${pieceName(o)}</span><span class="oc">${colorChip(o.c)}</span><span class="od">${Y.d}</span></button>`;
+    return `<button class="opt r${Y.r}" data-i="${i}">${spr(Y.s, '40px')}<span class="rr">${RARITY_NAME[Y.r]}</span><span class="on">${Y.n}</span><span class="od">${Y.d}</span></button>`;
   }).join('')}</div><div class="row2" style="grid-template-columns:1fr 1fr;margin-top:8px"><button class="btn" data-see>盤を見る</button><button class="btn" data-skip>置かない（縁銭＋1）</button></div></div>`;
   el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => choose(S.draft[+b.dataset.i]));
   el.querySelector('[data-skip]').onclick = () => { S.money++; hud(); closeDraft(); afterPick(); };
@@ -391,7 +375,7 @@ function choose(o) {
 }
 function place(i) {
   const old = S.board[i];
-  S.board[i] = { k: S.pending.k, c: S.pending.c };
+  S.board[i] = { k: S.pending.k };
   S.disabled.delete(i);
   V.flash[i] = V.t;
   V.floats.push({ x: SLOTS[i].x, y: SLOTS[i].y, text: old ? '置きかえ' : '置いた！', t: V.t, color: '#ffe2a8', big: true });
@@ -408,14 +392,14 @@ function afterPick() {
 }
 function toAim() {
   S.phase = 'aim'; V.ghost = null;
-  setHint(`盤をさわって、落とす位置を決める<br>指をはなすと 手玉${S.hand.length}こが全部 そこから落ちる`);
+  setHint(`盤をさわって、落とす位置を決める<br>指をはなすと 手玉${S.hand}こが全部 そこから落ちる`);
   paint();
 }
 $('bRepick').onclick = () => { if (S.phase !== 'place' && S.phase !== 'draft') return; S.phase = 'draft'; S.pending = null; V.ghost = null; setHint(''); $('placeBar').classList.add('hidden'); paint(); openDraft(); };
 function toX(e) { const r = cv.getBoundingClientRect(); return Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, (e.clientX - r.left) / r.width * W)); }
 cv.addEventListener('pointerdown', e => {
   if (!S || !V) return;
-  if (S.phase === 'aim' && S.hand.length > 0) { cv.setPointerCapture(e.pointerId); V.aim = toX(e); paint(); }
+  if (S.phase === 'aim' && S.hand > 0) { cv.setPointerCapture(e.pointerId); V.aim = toX(e); paint(); }
   if (S.phase === 'place') { const i = slotAt(cv, e); V.ghost = i >= 0 ? i : null; paint(); }
 });
 cv.addEventListener('pointermove', e => {
@@ -432,9 +416,10 @@ cv.addEventListener('pointercancel', () => { if (V) { V.aim = null; V.ghost = nu
 
 async function shoot(x) {
   S.phase = 'shooting';
-  const colors = S.hand.slice(); S.hand = []; S.balls = 0; hud(); setHint('');
+  const nBalls = S.hand; S.hand = 0; S.balls = 0; hud(); setHint('');
   const boss = curBoss();
-  const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, colors);
+  const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, nBalls);
+  V.pk = s.pk;   // 太鼓・花火で書きかわる、この勝負の入賞口
   if (boss && boss.fx === 'shake') { const bw = $('cv').parentElement; bw.style.animation = 'none'; void bw.offsetWidth; bw.style.animation = 'shake .25s 3'; }
   V.balls = s.balls; V.floats = V.floats.filter(f => V.t - f.t < 1);
   let seen = 0, last = performance.now(), acc = 0;
@@ -446,8 +431,11 @@ async function shoot(x) {
       while (acc >= 1 / 120 && !s.done) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; }
       for (; seen < s.events.length; seen++) {
         const ev = s.events[seen];
-        if (ev.type === 'drop') {
-          if (ev.c === NIJI) V.floats.push({ x: ev.x, y: 60, text: '虹の玉！', t: V.t, color: '#fff3c4', big: true });
+        if (ev.type === 'pk') {
+          V.pflash[ev.p] = V.t;   // 倍率は入賞口の数字がそのまま上がる
+        } else if (ev.type === 'fire') {
+          for (let p = 0; p < NP; p++) V.pflash[p] = V.t;
+          V.floats.push({ x: ev.x, y: ev.y, text: 'ドーン！', t: V.t, color: '#ff9a7a', big: true });
         } else if (ev.type === 'coin') {
           S.money++; hud(); V.floats.push({ x: ev.x, y: ev.y - 14, text: '縁銭+1', t: V.t, color: '#f2c14e', big: true });
         } else if (ev.type === 'hit') {
@@ -455,15 +443,14 @@ async function shoot(x) {
           const Y = YAKUMONO[ev.k];
           if (!ev.n && !Y.chain) continue;
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
-          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: ev.c === ANY ? '#ffe2a8' : COLORS[ev.c].c, big: ev.n >= 4 || !!Y.chain });
+          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
         } else if (ev.type === 'pocket') {
-          V.pflash[ev.p] = V.t;
-          if (ev.m !== 1) V.floats.push({ x: (ev.p + .5) * W / 7, y: POCKET_Y, text: ev.m ? '×' + ev.m : '締め！', t: V.t, color: ev.m ? '#ffe2a8' : '#ff6b6b', big: ev.m >= 3 });
+          V.plast = V.plast || {}; V.plast[ev.p] = V.t;   // 入った：入賞口のふちだけ光らせる
         } else if (ev.type === 'rocket') {
           V.floats.push({ x: ev.x, y: ev.y, text: '滝のぼり！', t: V.t, color: '#7fd6ff', big: true });
         }
       }
-      setCalc(s.balls.reduce((a, b) => a + (b.alive ? b.w : 0), 0), s.landedN + s.overflow, shotTotal(s));
+      setCalc(s.alive + s.wait.length, s.landedN, shotTotal(s));
       if (V.floats.length > 120) V.floats = V.floats.slice(-120);
       paint();
       if (s.done) done(); else requestAnimationFrame(frame);
@@ -471,7 +458,9 @@ async function shoot(x) {
     requestAnimationFrame(frame);
   });
   const tot = shotTotal(s);
-  afterShot(s);   // 当たった金魚が育つ
+  const grownUp = afterShot(s, S.pockets);   // 玉が当たった金魚の真下の入賞口が、ずっと＋1
+  grownUp.forEach(p => V.floats.push({ x: (p + .5) * W / NP, y: POCKET_Y - 20, text: '金魚：ずっと＋1', t: V.t, color: '#ff9a5a', big: true }));
+  V.pk = null;
   $('cTot').classList.remove('pop'); void $('cTot').offsetWidth; $('cTot').classList.add('pop');
   const big = tot >= S.tgt * 3;   // 目標の3倍をこえたら大当たり
   if (big) await jackpot(tot);
@@ -489,7 +478,7 @@ async function shoot(x) {
 async function jackpot(tot) {
   const bw = $('cv').parentElement;
   const el = document.createElement('div'); el.className = 'jackpot';
-  el.innerHTML = `<div class="in"><b>大当たり！</b><span>${tot.toLocaleString()} 玉</span></div>`;
+  el.innerHTML = `<div class="in"><b>大当たり！</b><span>${tot.toLocaleString()} 縁</span></div>`;
   bw.appendChild(el);
   bw.style.animation = 'none'; void bw.offsetWidth; bw.style.animation = 'shake .2s 4';
   try { navigator.vibrate && navigator.vibrate([40, 40, 80]); } catch (e) {}
@@ -523,8 +512,8 @@ async function lose() {
   clearSave();
   saveBest();
   const where = `${S.endless ? 'エンドレス ' : ''}夜${S.n}・${MATCH_NAME[S.k]}`;
-  $('overRec').innerHTML = `縁が足りなかったのは<br><b>${where}</b><br>いちばん大きな一発：<b>${S.best.toLocaleString()}</b> 玉`;
-  const txt = `よいまつり横丁 第2章「月見座」で ${where} まで縁を集めた！\n最大の一発 ${S.best.toLocaleString()}玉\n#よいまつり横丁 #月見座`;
+  $('overRec').innerHTML = `縁が足りなかったのは<br><b>${where}</b><br>いちばん大きな一発：<b>${S.best.toLocaleString()}</b> 縁`;
+  const txt = `よいまつり横丁 第2章「月見座」で ${where} まで縁を集めた！\n最大の一発 ${S.best.toLocaleString()}縁\n#よいまつり横丁 #月見座`;
   $('xPost').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(txt);
   show('s-over');
 }
@@ -547,19 +536,19 @@ function enterShop() {
 function rollShop() {
   const items = [];
   const rare = shuffle(YAKUMONO_KEYS.filter(k => YAKUMONO[k].r >= 1), S.r)[0];
-  items.push({ kind: 'yaku', k: rare, c: YAKUMONO[rare].any ? ANY : Math.floor(S.r() * NC), p: YAKUMONO[rare].p + 2 });
-  const ps = shuffle([0, 1, 2, 3, 4, 5, 6], S.r).slice(0, 2);
+  items.push({ kind: 'yaku', k: rare, p: YAKUMONO[rare].p + 2 });
+  const ps = shuffle([...Array(NP).keys()], S.r).slice(0, 2);
   ps.forEach(pos => items.push({ kind: 'pocket', pos, p: 4 + S.pockets[pos] }));   // pos＝どの入賞口か、p＝値段
   items.push({ kind: 'ball', p: 6 + S.extraBalls * 3 });   // 玉袋はいつでも買える（買うたびに少し高くなる）
   S.shop = items;
 }
-const POS = ['いちばん左', '左から2番目', '左から3番目', 'まんなか', '右から3番目', '右から2番目', 'いちばん右'];
+const POS = [...Array(NP).keys()].map(p => p === NP >> 1 ? 'まんなか' : p < NP >> 1 ? `左から${p + 1}番目` : `右から${NP - p}番目`);
 function renderShop() {
   snap('shop');
   $('shopMoney').textContent = S.money;
   $('shopItems').innerHTML = S.shop.map((it, i) => {
     let ic, title, d;
-    if (it.kind === 'yaku') { const Y = YAKUMONO[it.k]; ic = pieceIcon(it, '40px'); title = `役物：${pieceName(it)}`; d = `［${RARITY_NAME[Y.r]}］${colorChip(it.c)}<br>${Y.d}`; }
+    if (it.kind === 'yaku') { const Y = YAKUMONO[it.k]; ic = spr(Y.s, '40px'); title = `役物：${Y.n}`; d = `［${RARITY_NAME[Y.r]}］${Y.d}`; }
     else if (it.kind === 'pocket') { ic = `<span style="font-size:18px;color:#ffe2a8">×${S.pockets[it.pos] + 1}</span>`; title = '入賞口みがき'; d = `${POS[it.pos]}の入賞口 ×${S.pockets[it.pos]}→×${S.pockets[it.pos] + 1}`; }
     else { ic = spr('purse', '40px'); title = '玉袋'; d = `手玉が1つふえる（ずっと。ふえた玉の色はランダム）<br>いまの手玉：${BASE_BALLS + S.extraBalls}こ`; }
     const can = !it.sold && S.money >= it.p;
@@ -575,7 +564,7 @@ function renderShop() {
 function buy(i) {
   const it = S.shop[i]; if (it.sold || S.money < it.p) return;
   S.money -= it.p; it.sold = true;
-  if (it.kind === 'yaku') { S.tray.push({ k: it.k, c: it.c }); S.traySel = S.tray.length - 1; }
+  if (it.kind === 'yaku') { S.tray.push({ k: it.k }); S.traySel = S.tray.length - 1; }
   else if (it.kind === 'pocket') S.pockets[it.pos]++;
   else { S.extraBalls++; S.shop.push({ kind: 'ball', p: 6 + S.extraBalls * 3 }); }   // もう1つ買える
   $('shopSay').textContent = it.kind === 'yaku' ? '盤の釘をタップすると、そこに置けますよ。' : T.bought[Math.floor(S.r() * T.bought.length)];
@@ -593,7 +582,7 @@ cvS.addEventListener('click', e => {
   }
   const o = S.board[best]; if (!o) return;
   const Y = YAKUMONO[o.k], sell = Math.max(1, Math.floor(Y.p / 2));
-  const el = sheet(`${itemRow(o, o.k === 'kingyo' ? `<br>いま：当たると${YAKUMONO.kingyo.add(o)}つふえる（これまで${o.g || 0}発で当たった）` : '')}
+  const el = sheet(`${itemRow(o)}
     <div class="row2" style="grid-template-columns:1fr 1fr"><button class="btn" data-off>はずす</button><button class="btn gold" data-sell>売る（縁銭＋${sell}）</button></div>`);
   el.querySelector('[data-off]').onclick = () => { S.tray.push(o); S.board[best] = null; el.remove(); renderShop(); };
   el.querySelector('[data-sell]').onclick = () => { S.board[best] = null; S.money += sell; el.remove(); renderShop(); };
@@ -608,7 +597,7 @@ function nextMatch() {
 function title() {
   $('titleItems').innerHTML = ['lantern', 'cat', 'koi', 'firework'].map(k => spr(k, '48px')).join('');
   const b = store('pachinko-best');
-  $('bestRec').textContent = b && b.p ? `最高記録：夜${b.n}・${MATCH_NAME[b.k]}　最大の一発 ${(b.hand || 0).toLocaleString()}玉` : '';
+  $('bestRec').textContent = b && b.p ? `最高記録：夜${b.n}・${MATCH_NAME[b.k]}　最大の一発 ${(b.hand || 0).toLocaleString()}縁` : '';
   // エンドレスは最終話をクリアすると遊べる（それまではカギつきで見せておく）
   const cleared = !!store('pachinko-cleared');
   $('bEndless').disabled = !cleared;
@@ -631,11 +620,11 @@ function askName() {
   });
 }
 const HOW = `<h3>あそびかた</h3><div style="font-size:14px;line-height:1.8">
-・玉は3色（<span style="color:#e8453c">赤</span>・<span style="color:#3a8ee8">青</span>・<span style="color:#f2c94e">黄</span>）。手玉は${BASE_BALLS}こで、色は1つずつランダム。ごくまれに<b>虹の玉</b>が出て、どの色にもなる<br>
-・1回の勝負で、3つの役物から1つえらんで<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>のを${PICKS}回（役物の上に置くと置きかえ）。役物にも色がある<br>
+・玉はぜんぶ同じ白い玉。手玉は${BASE_BALLS}こ（玉袋でふえる）<br>
+・1回の勝負で、3つの役物から1つえらんで<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>のを${PICKS}回（役物の上に置くと置きかえ）<br>
 ・置きおわったら、盤をさわって落とす位置を決める。指をはなすと、<b>手玉が全部そこから つぎつぎに落ちる</b><br>
-・役物は、<b>同じ色の玉</b>が当たると玉をふやす。1つの玉は同じ役物では1回だけ（鯉に飛ばしてもらうのも1回）。分かれた玉は新しい玉なので、下の役物でまたふえる。<b>上限なし。盤を作りこむほど、どこまでもふえる</b><br>
-・入賞口に入った玉が<b style="color:var(--gold)">縁</b>になる。×3の入賞口に入った玉は3つ分。盤の上に見える玉は${MAX_ALIVE}こまでで、それをこえた分は玉の上に「×何こ分」とまとめて表示する（数はそのまま）<br>
+・役物は、当たった玉を分けたり、入賞口の倍率を上げたりする。1つの玉は同じ役物では1回だけ（葉っぱは何回でも）。分かれた玉は新しい玉なので、下の役物でまたふえる<br>
+・<b style="color:var(--gold)">縁 ＝ 入賞口に入った玉 × その入賞口の倍率</b>。入賞口は11こ。倍率は屋台のみがき・太鼓・花火・金魚で育つ<br>
 ・落とした縁が<b style="color:var(--gold)">目標の縁</b>をこえれば勝ち。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>
 ・盤は勝負をまたいで育っていく。勝負のあいだは藁人の屋台で、めずらしい役物・入賞口みがき・玉袋（手玉＋1）が縁銭で買える<br>
 ・十五夜（5晩め）の真夜中まで縁をためきるとクリア。そのあとはエンドレス</div>`;
