@@ -375,9 +375,9 @@ const BOSSES = [
   { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。左はしと右はしの入賞口2つずつに入った玉は数えない', fx: 'shime' },
 ];
 const MINIONS = [];
-const NIGHT_BASE = [18, 90, 400, 1600, 8000];   // ためる縁
+const NIGHT_BASE = [20, 100, 700, 5000, 40000];   // ためる縁
 const STORY_NIGHTS = 5;
-const MATCH_MULT = [1, 1.5, 2];
+const MATCH_MULT = [1, 1.7, 2.5];
 const PICKS = 2;   // 1回の勝負で、役物をえらんで置ける回数（そのあと手玉を全部落とす）
 const MATCH_NAME = ['宵', '夜ふけ', '真夜中'];
 const REWARD = [3, 4, 5];
@@ -386,7 +386,7 @@ const START_BOARD = { 16: { k: 'chochin' }, 22: { k: 'chochin' }, 30: { k: 'choc
 
 function nightBase(n) {
   if (n <= NIGHT_BASE.length) return NIGHT_BASE[n - 1];
-  return Math.round(NIGHT_BASE[NIGHT_BASE.length - 1] * Math.pow(2.5, n - NIGHT_BASE.length) / 100) * 100;
+  return Math.round(NIGHT_BASE[NIGHT_BASE.length - 1] * Math.pow(3, n - NIGHT_BASE.length) / 100) * 100;
 }
 function target(n, k) { const v = nightBase(n) * MATCH_MULT[k]; return v < 100 ? Math.round(v) : v < 1000 ? Math.round(v / 10) * 10 : Math.round(v / 100) * 100; }
 // 宵・夜ふけは月見座でふつうに打つ。真夜中は、その夜の「できごと」がある
