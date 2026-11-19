@@ -1,4 +1,4 @@
-// ボットで、夜ごとの勝ち抜き率を調べる（1手番ごとに役物を1つ置く）
+// ボットで、夜ごとの勝ち抜き率を調べる（1勝負に役物を PICKS 回置いて、手玉を全部いっぺんに落とす）
 // 使い方: node tools/sim.js [回数] [smart]
 //   smart：よく通る場所に置き、だんごはだんごの横へ、役物の多い列をねらう。玉袋も買う
 const E = require('../src/engine.js');
@@ -45,15 +45,16 @@ function playMatch(st, n, k, r) {
   const disabled = new Set();
   if (boss && boss.fx === 'bake') E.shuffle(st.board.map((o, i) => o ? i : -1).filter(i => i >= 0), r).slice(0, 2).forEach(i => disabled.add(i));
   const pockets = E.matchPockets(st.pockets, boss);
-  let total = 0;
-  while (hand.length) {
+  for (let t = 0; t < E.PICKS; t++) {
     const d = E.draft(r, n); d.sort((a, b) => E.YAKUMONO[b.k].r - E.YAKUMONO[a.k].r);
     SMART ? placeSmart(st, d[0]) : placeRandom(st, d[0], r);
-    const color = hand.shift();
-    const s = E.runShot(aim(st, color, r), { board: st.board, pockets, disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r }, color);
-    total += E.shotTotal(s); st.shots.push(E.shotTotal(s));
-    if (total >= tgt && !CALIB) return { win: true, balls: hand.length };
   }
+  // 手玉の色でいちばん多い色にねらいを合わせて、全部いっぺんに落とす
+  const cnt = [0, 0, 0]; hand.forEach(c => { if (c < E.NC) cnt[c]++; });
+  const main = cnt.indexOf(Math.max(...cnt));
+  const s = E.runShot(aim(st, main, r), { board: st.board, pockets, disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r }, hand);
+  const total = E.shotTotal(s); st.shots.push(total); E.afterShot(s); st.money += s.coins || 0;
+  if (total >= tgt && !CALIB) return { win: true, balls: 0 };
   if (CALIB) { (CAL[n * 3 + k] = CAL[n * 3 + k] || []).push(total); return { win: true, balls: 0 }; }
   return { win: false };
 }

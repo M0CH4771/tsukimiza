@@ -1,5 +1,5 @@
 // 役物ごとの強さをくらべる：ふつうの盤に、その役物を足したら1発の玉がどれだけふえるか
-// 使い方: node tools/value.js [1種類あたりの発数]   （COPIES=1 で1つだけ足す。色は5色に1つずつ回す）
+// 使い方: node tools/value.js [1種類あたりの発数]   （COPIES=1 で1つだけ足す。色は3色に1つずつ回す）
 const E = require('../src/engine.js');
 const N = +process.argv[2] || 400, COPIES = +process.env.COPIES || 3;
 const TRAFFIC = E.SLOTS.map(() => 0);
@@ -8,12 +8,12 @@ const TRAFFIC = E.SLOTS.map(() => 0);
 const order = E.SLOTS.map((s, i) => i).sort((a, b) => TRAFFIC[b] - TRAFFIC[a]);
 function baseBoard() {   // 中盤くらい：5色のちょうちんと鈴とだんご
   const b = E.SLOTS.map(() => null);
-  [['chochin', 0], ['suzu', -1], ['chochin', 1], ['dango', 2], ['chochin', 3], ['suzu', -1], ['chochin', 4], ['dango', 0]].forEach(([k, c], j) => b[order[j * 2]] = { k, c });
+  [['chochin', 0], ['suzu', -1], ['chochin', 1], ['dango', 2], ['chochin', 2], ['suzu', -1], ['chochin', 0], ['dango', 0]].forEach(([k, c], j) => b[order[j * 2]] = { k, c });
   return b;
 }
 function avg(board) {
   const r = E.rng(7); let t = 0, mx = 0;
-  for (let i = 0; i < N; i++) { const s = E.runShot(150 + r() * 60, { board: board.map(o => o && { ...o }), pockets: E.POCKETS_START, disabled: new Set(), r }, i % 5); const v = E.shotTotal(s); t += v; mx = Math.max(mx, v); }
+  for (let i = 0; i < N; i++) { const s = E.runShot(150 + r() * 60, { board: board.map(o => o && { ...o }), pockets: E.POCKETS_START, disabled: new Set(), r }, i % E.NC); const v = E.shotTotal(s); t += v; mx = Math.max(mx, v); }
   return { avg: t / N, max: mx };
 }
 const base = avg(baseBoard());
@@ -21,7 +21,7 @@ console.log('ふつうの盤だけ：1発の平均', base.avg.toFixed(1));
 const rows = [];
 for (const k of E.YAKUMONO_KEYS) {
   const b = baseBoard(); let added = 0;
-  for (const i of order) { if (added >= COPIES) break; if (!b[i]) { b[i] = { k, c: E.YAKUMONO[k].any ? E.ANY : added % 5 }; added++; } }
+  for (const i of order) { if (added >= COPIES) break; if (!b[i]) { b[i] = { k, c: E.YAKUMONO[k].any ? E.ANY : added % E.NC }; added++; } }
   const v = avg(b);
   rows.push([k, E.YAKUMONO[k].r, v.avg.toFixed(1), Math.round(v.avg / base.avg * 100) + '%', v.max]);
 }

@@ -23,7 +23,7 @@ const T = {
     tetsu: ['x', '……まだだ。'],
   },
   // 宵・夜ふけに、ギンコが言うこと
-  tips: ['今夜もじゃらじゃら打とう！', '役物は、自分と同じ色の玉が当たったときだけふえるよ。次の玉の色を見て、ねらってね！', 'だんごは、だんごのとなり！ テツじいが言ってた。', '金魚は当たるたびに育つの。早めに置くのがおすすめ！', '桜は玉を「次の色」に変えるよ。赤の桜の下に青の役物を置くと、つながる！', '虹の玉はめったに出ないけど、どの色の役物でもふえるよ。', '入賞口のまんなかは×3！ 玉をまんなかに集めると強いよ。', 'おコンの算盤は、盤に同じ色の役物が多いほど強くなるよ。'],
+  tips: ['今夜もじゃらじゃら打とう！', '役物は、自分と同じ色の玉が当たったときだけふえるよ。手玉に多い色の役物を育てよう！', '玉はぜんぶ同じところから落ちるよ。役物が縦にならんだ列をねらうと強い！', 'だんごは、だんごのとなり！ ひとつだけだと ふえないよ。', '金魚は当たった勝負ごとに育つの。早めに置くのがおすすめ！', '染めの鈴で玉の色をそろえると、同じ色の役物が続けて反応するよ。', '桜は、ふえた玉の色を変えるよ。赤の桜の下に青の役物を置くと、つながる！', '小判に当たると縁銭がもらえるよ。玉袋を買うのに使おう。', 'おコンの算盤は、盤に同じ色の役物が多いほど強くなるよ。'],
   shop: ['まいど。月見座の前に、屋台を出させてもらいました。', '今夜もよい品がそろっております。', 'お代は縁銭で。安くはありませんよ。'],
   bought: ['お目が高い。', 'まいど。よい場所に置いてやってください。', 'それは、よく当たりますよ。'],
 };
@@ -161,7 +161,7 @@ function itemRow(o, extra = '') {
 function listSheet(onlyBoard) {
   const keys = onlyBoard ? S.board.filter(Boolean).filter((o, i, a) => a.findIndex(x => x.k === o.k && x.c === o.c) === i) : YAKUMONO_KEYS;
   sheet(`<h3>${onlyBoard ? '盤にある役物' : '役物の一覧'}</h3>${keys.map(k => itemRow(k)).join('')}
-    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉の数（×3の入賞口なら3つ分）。<br>役物は、自分と同じ色の玉が当たるとふえる。虹の玉は、どの色の役物にも反応する。<br>1つの玉は同じ役物で1回だけふえる（葉っぱは何回でも）。分かれた玉は新しい玉なので、下の役物でまたふえる。<br>盤の玉が${MAX_ALIVE}こをこえると、ふえた分は当たった玉に「×何こ分」として乗る。</p>`);
+    <p style="color:var(--mute);font-size:12px;line-height:1.6;margin:8px 0 0">縁 ＝ 入賞口に入った玉の数（×3の入賞口なら3つ分）。<br>役物は、自分と同じ色の玉が当たるとふえる（「どの色でも」の役物もある）。虹の玉は、どの色の役物にも反応する。虹の玉から分かれた玉は、その役物の色になる。<br>1つの玉は同じ役物で1回だけ。分かれた玉は新しい玉なので、下の役物でまたふえる。</p>`);
 }
 function moonSVG(p) {
   // p: 0〜1（光っている割合）。右から満ちていく
@@ -281,15 +281,15 @@ const SAVE_KEY = 'tsukimiza-save';
 function snap(where) {
   if (!S) return;
   store(SAVE_KEY, {
-    v: 2, where, at: Date.now(),
+    v: 3, where, at: Date.now(),
     n: S.n, k: S.k, money: S.money, board: S.board, pockets: S.pockets, tray: S.tray, extraBalls: S.extraBalls,
     best: S.best, story: S.story, endless: S.endless, seed: S.seed, rs: S.r.get(), speed: S.speed,
     shop: where === 'shop' ? S.shop : null, rerollCost: S.rerollCost,
-    play: where === 'play' ? { score: S.score, hand: S.hand, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft } : null,
+    play: where === 'play' ? { score: S.score, hand: S.hand, tgt: S.tgt, disabled: [...S.disabled], draft: S.draft, picks: S.picks } : null,
   });
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
-function savedRun() { const d = store(SAVE_KEY); return d && d.v === 2 ? d : null; }   // 玉の数ルールより前のセーブは使わない
+function savedRun() { const d = store(SAVE_KEY); return d && d.v === 3 ? d : null; }   // 「全部いっぺんに落とす」ルールより前のセーブは使わない
 function resume() {
   const d = savedRun(); if (!d) return;
   S = { seed: d.seed, r: rng(d.seed), n: d.n, k: d.k, money: d.money, board: d.board, pockets: d.pockets, tray: d.tray || [], extraBalls: d.extraBalls,
@@ -297,7 +297,7 @@ function resume() {
   S.r.set(d.rs);
   $('speedLbl').textContent = S.speed === 1 ? 'ふつう' : 'はやい';
   if (d.where === 'shop' && d.shop) { S.shop = d.shop; enterShop(); return; }
-  if (d.where === 'play' && d.play) { matchScreen(d.play); S.phase = 'draft'; S.draft = d.play.draft; setHint(''); paint(); openDraft(); return; }
+  if (d.where === 'play' && d.play) { matchScreen(d.play); S.picks = d.play.picks || PICKS; S.phase = 'draft'; S.draft = d.play.draft; setHint(''); paint(); openDraft(); return; }
   showVs(true);
 }
 function curOpp() { return opponent(S.n, S.k); }
@@ -331,6 +331,7 @@ function startMatch() {
   const dis = [];
   if (boss && boss.fx === 'bake') shuffle(S.board.map((o, i) => o ? i : -1).filter(i => i >= 0), S.r).slice(0, 2).forEach(i => dis.push(i));
   matchScreen({ score: 0, hand: makeHand(S.r, S.extraBalls, boss), tgt: target(S.n, S.k), disabled: dis });
+  S.picks = PICKS;
   nextTurn();
 }
 // 対局の画面を用意する（はじめから・続きからの両方で使う）
@@ -350,7 +351,7 @@ function matchScreen(m) {
 function hud() {
   $('pScore').textContent = S.score.toLocaleString();
   $('pBar').style.width = Math.min(100, S.score / S.tgt * 100) + '%';
-  $('pBalls').innerHTML = S.hand.length ? S.hand.map((c, i) => `<i class="hb${i === 0 ? ' next' : ''}" style="background:${colorCss(c)}"></i>`).join('') : '0';
+  $('pBalls').innerHTML = S.hand.length ? S.hand.map(c => `<i class="hb" style="background:${colorCss(c)}"></i>`).join('') : '0';
   $('pMoney').textContent = S.money;
 }
 // 下の数字：盤の上の玉／入った玉の数／縁（入賞口の倍率をかけた数）
@@ -369,12 +370,14 @@ function nextTurn() {
 function openDraft() {
   closeDraft();
   const el = document.createElement('div'); el.className = 'draft'; el.id = 'draftPanel';
-  el.innerHTML = `<div class="in px"><h4>次の玉は ${colorChip(S.hand[0])}　役物をひとつ置ける（のこり手玉 ${S.hand.length}）</h4><div class="opts">${S.draft.map((o, i) => {
+  const cnt = COLORS.map((c, i) => S.hand.filter(x => x === i).length), nj = S.hand.filter(x => x === NIJI).length;
+  const handTxt = COLORS.map((c, i) => cnt[i] ? `${colorChip(i)}${cnt[i]}` : '').join(' ') + (nj ? ` ${colorChip(NIJI)}${nj}` : '');
+  el.innerHTML = `<div class="in px"><h4>役物をえらんで置く（あと${S.picks}回）<br><small>手玉 ${handTxt}</small></h4><div class="opts">${S.draft.map((o, i) => {
     const Y = YAKUMONO[o.k];
     return `<button class="opt r${Y.r}" data-i="${i}">${pieceIcon(o, '40px')}<span class="rr">${RARITY_NAME[Y.r]}</span><span class="on">${pieceName(o)}</span><span class="oc">${colorChip(o.c)}</span><span class="od">${Y.d}</span></button>`;
   }).join('')}</div><div class="row2" style="grid-template-columns:1fr 1fr;margin-top:8px"><button class="btn" data-see>盤を見る</button><button class="btn" data-skip>置かない（縁銭＋1）</button></div></div>`;
   el.querySelectorAll('[data-i]').forEach(b => b.onclick = () => choose(S.draft[+b.dataset.i]));
-  el.querySelector('[data-skip]').onclick = () => { S.money++; hud(); closeDraft(); toAim(); };
+  el.querySelector('[data-skip]').onclick = () => { S.money++; hud(); closeDraft(); afterPick(); };
   el.querySelector('[data-see]').onclick = () => { closeDraft(); setHint('盤を見たら、下の「えらぶ」で戻る'); $('placeBar').classList.remove('hidden'); $('bRepick').textContent = 'えらぶ'; };
   document.body.appendChild(el);
 }
@@ -393,13 +396,19 @@ function place(i) {
   V.flash[i] = V.t;
   V.floats.push({ x: SLOTS[i].x, y: SLOTS[i].y, text: old ? '置きかえ' : '置いた！', t: V.t, color: '#ffe2a8', big: true });
   S.pending = null; $('placeBar').classList.add('hidden');
-  toAim();
+  afterPick();
   // 浮かぶ文字を少しだけ動かす
   (async () => { const end = V.t + .9; while (V.t < end && S.phase === 'aim') { V.t += 1 / 30; paint(); await sleep(16); } })();
 }
+// 1つ置いたら、まだ置けるなら次の3つ、置ききったら ねらう
+function afterPick() {
+  S.picks--;
+  if (S.picks > 0) { S.phase = 'between'; paint(); setTimeout(nextTurn, 450); return; }
+  toAim();
+}
 function toAim() {
   S.phase = 'aim'; V.ghost = null;
-  setHint('盤をさわって、落とす位置を決める<br>指をはなすと玉が出る');
+  setHint(`盤をさわって、落とす位置を決める<br>指をはなすと 手玉${S.hand.length}こが全部 そこから落ちる`);
   paint();
 }
 $('bRepick').onclick = () => { if (S.phase !== 'place' && S.phase !== 'draft') return; S.phase = 'draft'; S.pending = null; V.ghost = null; setHint(''); $('placeBar').classList.add('hidden'); paint(); openDraft(); };
@@ -423,10 +432,9 @@ cv.addEventListener('pointercancel', () => { if (V) { V.aim = null; V.ghost = nu
 
 async function shoot(x) {
   S.phase = 'shooting';
-  const color = S.hand.shift(); S.balls = S.hand.length; hud(); setHint('');
+  const colors = S.hand.slice(); S.hand = []; S.balls = 0; hud(); setHint('');
   const boss = curBoss();
-  const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, color);
-  if (color === NIJI) V.floats.push({ x, y: 60, text: '虹の玉！', t: V.t, color: '#fff3c4', big: true });
+  const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, colors);
   if (boss && boss.fx === 'shake') { const bw = $('cv').parentElement; bw.style.animation = 'none'; void bw.offsetWidth; bw.style.animation = 'shake .25s 3'; }
   V.balls = s.balls; V.floats = V.floats.filter(f => V.t - f.t < 1);
   let seen = 0, last = performance.now(), acc = 0;
@@ -438,9 +446,14 @@ async function shoot(x) {
       while (acc >= 1 / 120 && !s.done) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; }
       for (; seen < s.events.length; seen++) {
         const ev = s.events[seen];
-        if (ev.type === 'hit') {
+        if (ev.type === 'drop') {
+          if (ev.c === NIJI) V.floats.push({ x: ev.x, y: 60, text: '虹の玉！', t: V.t, color: '#fff3c4', big: true });
+        } else if (ev.type === 'coin') {
+          S.money++; hud(); V.floats.push({ x: ev.x, y: ev.y - 14, text: '縁銭+1', t: V.t, color: '#f2c14e', big: true });
+        } else if (ev.type === 'hit') {
           V.flash[ev.i] = V.t;
           const Y = YAKUMONO[ev.k];
+          if (!ev.n && !Y.chain) continue;
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
           if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: ev.c === ANY ? '#ffe2a8' : COLORS[ev.c].c, big: ev.n >= 4 || !!Y.chain });
         } else if (ev.type === 'pocket') {
@@ -458,8 +471,9 @@ async function shoot(x) {
     requestAnimationFrame(frame);
   });
   const tot = shotTotal(s);
+  afterShot(s);   // 当たった金魚が育つ
   $('cTot').classList.remove('pop'); void $('cTot').offsetWidth; $('cTot').classList.add('pop');
-  const big = tot >= S.tgt * .35;   // 目標の3割5分をひと玉で出したら大当たり
+  const big = tot >= S.tgt * 3;   // 目標の3倍をこえたら大当たり
   if (big) await jackpot(tot);
   await sleep(450);
   const from = S.score; S.score += tot; S.best = Math.max(S.best, tot);
@@ -469,8 +483,7 @@ async function shoot(x) {
   const end = V.t + .8; while (V.t < end) { V.t += 1 / 30; paint(); await sleep(16); }
   V.balls = []; paint();
   if (S.score >= S.tgt) return win();
-  if (S.balls <= 0) return lose();
-  nextTurn();
+  return lose();
 }
 
 async function jackpot(tot) {
@@ -490,7 +503,6 @@ async function win() {
   if (boss && ns) await scene(ns.end);
   else if (boss) await talk([[boss.who, 'x', '……やるな。']]);
   const rows = [[`${MATCH_NAME[S.k]}の縁がたまったお礼`, REWARD[S.k]]];
-  if (S.balls > 0) rows.push([`残った手玉 ×${S.balls}`, S.balls]);
   const intr = Math.min(5, Math.floor(S.money / 5)); if (intr) rows.push(['利子（縁銭5枚ごとに1）', intr]);
   S.money += rows.reduce((a, r) => a + r[1], 0);
   $('payList').innerHTML = rows.map(r => `<div><span>${r[0]}</span><b>+${r[1]}</b></div>`).join('') + `<div class="sum"><span>縁銭</span><b>${S.money}</b></div>`;
@@ -535,7 +547,7 @@ function enterShop() {
 function rollShop() {
   const items = [];
   const rare = shuffle(YAKUMONO_KEYS.filter(k => YAKUMONO[k].r >= 1), S.r)[0];
-  items.push({ kind: 'yaku', k: rare, c: YAKUMONO[rare].any ? ANY : Math.floor(S.r() * 5), p: YAKUMONO[rare].p + 2 });
+  items.push({ kind: 'yaku', k: rare, c: YAKUMONO[rare].any ? ANY : Math.floor(S.r() * NC), p: YAKUMONO[rare].p + 2 });
   const ps = shuffle([0, 1, 2, 3, 4, 5, 6], S.r).slice(0, 2);
   ps.forEach(pos => items.push({ kind: 'pocket', pos, p: 4 + S.pockets[pos] }));   // pos＝どの入賞口か、p＝値段
   items.push({ kind: 'ball', p: 6 + S.extraBalls * 3 });   // 玉袋はいつでも買える（買うたびに少し高くなる）
@@ -581,7 +593,7 @@ cvS.addEventListener('click', e => {
   }
   const o = S.board[best]; if (!o) return;
   const Y = YAKUMONO[o.k], sell = Math.max(1, Math.floor(Y.p / 2));
-  const el = sheet(`${itemRow(o, o.k === 'kingyo' ? `<br>いま：当たると${YAKUMONO.kingyo.add(o)}つふえる（${o.g || 0}回当たった）` : '')}
+  const el = sheet(`${itemRow(o, o.k === 'kingyo' ? `<br>いま：当たると${YAKUMONO.kingyo.add(o)}つふえる（これまで${o.g || 0}発で当たった）` : '')}
     <div class="row2" style="grid-template-columns:1fr 1fr"><button class="btn" data-off>はずす</button><button class="btn gold" data-sell>売る（縁銭＋${sell}）</button></div>`);
   el.querySelector('[data-off]').onclick = () => { S.tray.push(o); S.board[best] = null; el.remove(); renderShop(); };
   el.querySelector('[data-sell]').onclick = () => { S.board[best] = null; S.money += sell; el.remove(); renderShop(); };
@@ -619,12 +631,12 @@ function askName() {
   });
 }
 const HOW = `<h3>あそびかた</h3><div style="font-size:14px;line-height:1.8">
-・玉は5色（<span style="color:#e8453c">赤</span>・<span style="color:#3a8ee8">青</span>・<span style="color:#4cbf5a">緑</span>・<span style="color:#f2c94e">黄</span>・<span style="color:#a35ad8">紫</span>）。1回の勝負で、5色を1つずつ打つ（順番はばらばら）。ごくまれに<b>虹の玉</b>が出て、どの色にもなる<br>
-・玉を打つ前に、3つの役物から1つえらんで、<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>（役物の上に置くと置きかえ）。役物にも色がある<br>
-・盤をさわって落とす位置を決め、指をはなすと玉が出る<br>
-・役物は、<b>同じ色の玉</b>が当たると玉をふやす。1つの玉は同じ役物では1回だけ（鯉に飛ばしてもらうのも1回）。分かれた玉は新しい玉なので、下の役物でまたふえる。<b>役物を並べるほど、どこまでもふえる</b><br>
-・入賞口に入った玉が<b style="color:var(--gold)">縁</b>になる。×3の入賞口に入った玉は3つ分<br>
-・手玉を打ちきるまでに<b style="color:var(--gold)">目標の縁</b>をためる。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>
+・玉は3色（<span style="color:#e8453c">赤</span>・<span style="color:#3a8ee8">青</span>・<span style="color:#f2c94e">黄</span>）。手玉は${BASE_BALLS}こで、色は1つずつランダム。ごくまれに<b>虹の玉</b>が出て、どの色にもなる<br>
+・1回の勝負で、3つの役物から1つえらんで<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>のを${PICKS}回（役物の上に置くと置きかえ）。役物にも色がある<br>
+・置きおわったら、盤をさわって落とす位置を決める。指をはなすと、<b>手玉が全部そこから つぎつぎに落ちる</b><br>
+・役物は、<b>同じ色の玉</b>が当たると玉をふやす。1つの玉は同じ役物では1回だけ（鯉に飛ばしてもらうのも1回）。分かれた玉は新しい玉なので、下の役物でまたふえる。<b>上限なし。盤を作りこむほど、どこまでもふえる</b><br>
+・入賞口に入った玉が<b style="color:var(--gold)">縁</b>になる。×3の入賞口に入った玉は3つ分。盤の上に見える玉は${MAX_ALIVE}こまでで、それをこえた分は玉の上に「×何こ分」とまとめて表示する（数はそのまま）<br>
+・落とした縁が<b style="color:var(--gold)">目標の縁</b>をこえれば勝ち。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>
 ・盤は勝負をまたいで育っていく。勝負のあいだは藁人の屋台で、めずらしい役物・入賞口みがき・玉袋（手玉＋1）が縁銭で買える<br>
 ・十五夜（5晩め）の真夜中まで縁をためきるとクリア。そのあとはエンドレス</div>`;
 
