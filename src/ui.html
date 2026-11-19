@@ -164,6 +164,13 @@ canvas.board{width:100%;display:block;touch-action:none}
 .jackpot .in{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 26px;background:#0b0812d9;border:3px solid #f2c14e;box-shadow:0 0 24px #f2c14e88;animation:pop .45s}
 .jackpot b{display:block;font-weight:normal;font-size:40px;line-height:1.1;color:#fff3c4;text-shadow:3px 3px 0 #a32f28}
 .jackpot span{display:block;font-size:30px;line-height:1.1;color:#ffe2a8}
+/* 色 */
+.cchip{display:inline-block;width:.9em;height:.9em;border-radius:50%;vertical-align:-.1em;margin:0 3px 0 2px;border:1px solid #0b0812}
+.picon{display:inline-grid;place-items:center;border-radius:50%;box-shadow:0 0 0 3px var(--pc,#fff);background:#1c1629;padding:2px}
+.opt .oc{font-size:11px;color:var(--ink)}
+.stat.h b{display:flex;justify-content:center;gap:3px;flex-wrap:wrap;min-height:22px;align-items:center}
+.hb{display:inline-block;width:11px;height:11px;border-radius:50%;border:1px solid #0b0812}
+.hb.next{width:15px;height:15px;box-shadow:0 0 0 2px #fff3c4}
 /* 月 */
 .moon{display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0 2px;font-size:13px;color:var(--mute)}
 .moon svg{width:26px;height:26px}
@@ -208,7 +215,7 @@ canvas.board{width:100%;display:block;touch-action:none}
     <div class="oname" id="vsName"></div>
     <div id="vsRule"></div>
     <div class="line" id="vsLine"></div>
-    <div class="tgt">ためる縁 <b id="vsTgt"></b> 点</div>
+    <div class="tgt">ためる縁 <b id="vsTgt"></b> 玉</div>
     <button class="btn red wide" id="bFight" style="margin-top:12px">打ちはじめる</button>
   </section>
 
@@ -216,7 +223,7 @@ canvas.board{width:100%;display:block;touch-action:none}
     <div class="hud">
       <div class="opp px"><div class="of" id="pFace"></div><div class="on"><span id="pName"></span><small id="pNight"></small></div></div>
       <div class="goal px">
-        <div class="row"><span>得点 <b id="pScore">0</b></span><span>目標 <span class="t" id="pTgt"></span></span></div>
+        <div class="row"><span>縁 <b id="pScore">0</b></span><span>目標 <span class="t" id="pTgt"></span></span></div>
         <div class="bar"><i id="pBar" style="width:0"></i></div>
       </div>
     </div>
@@ -230,10 +237,9 @@ canvas.board{width:100%;display:block;touch-action:none}
     <div class="boardwrap"><canvas class="board" id="cv"></canvas><div class="hint" id="hint">盤をさわって、落とす位置を決める<br>指をはなすと玉が出る</div></div>
     <div class="placebar hidden" id="placeBar"><button class="btn" id="bRepick">えらびなおす</button></div>
     <div class="calc">
-      <div class="box mon"><span class="lbl">文</span><span id="cMon">0</span></div><span class="x">×</span>
-      <div class="box mul"><span class="lbl">倍率</span><span id="cMul">1</span></div><span class="x">×</span>
-      <div class="box pk"><span class="lbl">入賞</span><span id="cPk">-</span></div><span class="x">=</span>
-      <span class="tot" id="cTot">0</span>
+      <div class="box mon"><span class="lbl">盤の玉</span><span id="cMon">0</span></div>
+      <div class="box mul"><span class="lbl">入った玉</span><span id="cMul">0</span></div><span class="x">→</span>
+      <span class="tot" id="cTot">0</span><span class="x" style="font-size:13px">縁</span>
     </div>
   </section>
 

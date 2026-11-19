@@ -1,14 +1,30 @@
 // ===== よいまつり横丁 第2章 月見座：ルール =====
-// 盤の釘の位置に「役物」を置いて育てる。玉が当たるたびに文・倍率がたまり、
-// 入賞口に入ったところで 点 ＝ 文 × 倍率 × 入賞口の倍率。
+// 点は「玉の数」。入賞口に入った玉を数える（×3の入賞口に入った玉は3つ分）。
+// 玉は5色（赤・青・緑・黄・紫）。ときどき（1%）虹の玉が出て、どの色としてもあつかう。
+// 役物は盤の釘の位置に置く。役物にはそれぞれ色があり、その色の玉が当たると玉がふえる。
+// 1つの玉は、同じ役物では1回だけふえる（分かれた玉も、親がふえた役物ではふえない）。
+// ふえるのは「打った玉」と「その子」まで。孫の玉（小さく見える）は、もうふえない。
 
 const W = 360, H = 580;
-const BALL_R = 7, NAIL_R = 4, ITEM_R = 9;   // 役物は釘より少し大きいだけ（大きすぎると玉がハマって稼ぎすぎる）
-const MIN_IMPACT = 40, SHOT_TIMEOUT = 10;   // 当たりは、玉がちゃんとぶつかったとき（速さ40以上）だけ数える。回数の制限はなし
+const BALL_R = 7, NAIL_R = 4, ITEM_R = 9;
+const MIN_IMPACT = 40, SHOT_TIMEOUT = 12;   // 当たりは、玉がちゃんとぶつかったとき（速さ40以上）だけ
 const POCKET_Y = 516;
-const NAIL_MON = 30;   // ただの釘に当たったときの文
 const GRAVITY = 760, MAX_V = 720;
-const MAX_BALLS = 5;   // 葉っぱの分身で増える玉の上限（一発）
+const MAX_ALIVE = 70;
+const MAX_GEN = 2;      // 打った玉＝0代、子＝1代。この代より下の玉は役物でふえない   // 盤の上に同時にいられる玉の数。こえた分は「あふれ玉」として1つずつ数える
+
+// 玉の色。5 は虹（どの色にもなる）
+const COLORS = [
+  { k: 'aka', n: '赤', c: '#e8453c' },
+  { k: 'ao', n: '青', c: '#3a8ee8' },
+  { k: 'midori', n: '緑', c: '#4cbf5a' },
+  { k: 'ki', n: '黄', c: '#f2c94e' },
+  { k: 'murasaki', n: '紫', c: '#a35ad8' },
+];
+const NIJI = 5, ANY = -1, NIJI_RATE = .01;
+const colorName = c => c === NIJI ? '虹' : c === ANY ? 'どの色でも' : COLORS[c].n;
+const nextColor = c => c === NIJI ? NIJI : (c + 1) % 5;
+const colorMatch = (ball, piece) => piece === ANY || ball === NIJI || ball === piece;
 
 // 釘の位置：8段、偶数段は7本、奇数段は6本（ずらして並べる）
 const SLOTS = [];
@@ -28,53 +44,47 @@ const POCKETS_START = [1, 2, 1, 3, 1, 2, 1];
 const pocketOf = x => Math.max(0, Math.min(6, Math.floor(x / (W / 7))));
 
 // ===== 役物 =====
-// fx(c, i, o, direct) … c はその一発の状態（mon, mul, …）、i は置き場所、o は置いた役物
-// 返すのは、盤に浮かべる文字
+// any: true なら色を持たない（どの色の玉にも反応する）
+// add(o, i, board, s)：ふえる玉の数。to：ふえた玉の色（'same' 同じ色／'next' 次の色／'five' 5色ぜんぶ）
 const YAKUMONO = {
-  chochin:  { r: 0, n: '赤ちょうちん', s: 'lantern', p: 3, d: '文＋150',
-    fx: c => { c.mon += 150; return '+150文'; } },
-  suzu:     { r: 0, n: '招きの鈴', s: 'i_bell', p: 3, d: '倍率＋0.5',
-    fx: c => { c.mul += .5; return '倍率+0.5'; } },
-  maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '倍率＋1',
-    fx: c => { c.mul += 1; return '倍率+1'; } },
-  dango:    { r: 0, n: 'だんご', s: 'dango', p: 4, d: '文＋60。となりのだんご1つにつき さらに＋60',
-    fx: (c, i, o, b) => { const v = 60 * (1 + SLOTS[i].nb.filter(j => b[j] && b[j].k === 'dango').length); c.mon += v; return `+${v}文`; } },
-  sakura:   { r: 0, n: '桜', s: 'sakura', p: 4, d: '文＋40。盤にある桜1本につき さらに＋40',
-    fx: (c, i, o, b) => { const v = 40 * b.filter(x => x && x.k === 'sakura').length; c.mon += v; return `+${v}文`; } },
-  taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 5, d: '文＋（この一発で当たった役物の数×70）',
-    fx: c => { const v = c.hits * 70; c.mon += v; return `+${v}文`; } },
-  kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 5, d: '文＋（育ち）。当たるたびに育ちが15ふえる（ずっと）。はじめは100',
-    fx: (c, i, o) => { o.g = (o.g || 100); const v = o.g; c.mon += v; o.g += 15; return `+${v}文`; } },
-  koban:    { r: 0, n: '小判', s: 'coin', p: 4, d: '当たると縁銭＋1（一発に2回まで）',
-    fx: c => { if (c.coins >= 2) return null; c.coins++; return '縁銭+1'; } },
-  fox:      { r: 1, n: 'おコンの算盤', s: 'fox', p: 6, d: 'この一発で当たった役物の種類1つにつき 倍率＋0.75（一発に1回）', once: true,
-    fx: c => { const v = c.kinds.size * .75; c.mul += v; return `倍率+${v}`; } },
-  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 7, d: '倍率×2.5（一発に1回だけ。2本目からは倍率＋1.5）', once: true,
-    fx: c => {
-      if (c.oniUsed) { c.mul += 1.5; return '倍率+1.5'; }
-      c.oniUsed = true; c.mul = Math.round(c.mul * 2.5 * 100) / 100; return '倍率×2.5';
-    } },
-  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: '文＋150。玉を盤のいちばん上まで飛ばす（玉1つに1回まで）', bounce: true,
-    fx: c => { c.mon += 150; return '+150文'; } },
-  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 10, d: '当たるたびに玉が分身する（一発で玉は5こまで）', split: true,
-    fx: () => '分身！' },
-  hanabi:   { r: 1, n: '花火', s: 'firework', p: 6, d: 'となりの役物を ぜんぶ発動する（一発に1回）', once: true,
-    chain: 'nb', fx: () => 'ドン！' },
-  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 7, d: '同じ段の役物を ぜんぶ発動する（一発に2回）', once: 2,
-    chain: 'row', fx: () => 'ゴロゴロ！' },
+  chochin:  { r: 0, n: '赤ちょうちん', s: 'lantern', p: 3, d: 'その色の玉が当たると、3つに分かれる',
+    add: () => 2 },
+  dango:    { r: 0, n: 'だんご', s: 'dango', p: 3, d: 'その色の玉が当たると1つふえる。となりのだんご1つにつき、さらに1つ',
+    add: (o, i, b) => 1 + SLOTS[i].nb.filter(j => b[j] && b[j].k === 'dango').length },
+  sakura:   { r: 0, n: '桜', s: 'sakura', p: 3, d: 'その色の玉が当たると2つに分かれ、どちらも「次の色」に変わる（赤→青→緑→黄→紫→赤）', to: 'next', recolor: true,
+    add: () => 1 },
+  suzu:     { r: 0, n: '招きの鈴', s: 'i_bell', p: 4, any: true, d: 'どの色の玉が当たっても、1つふえる',
+    add: () => 1 },
+  maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: 'その色の玉が当たると、5つに分かれる',
+    add: () => 4 },
+  koi:      { r: 1, n: '鯉の滝のぼり', s: 'koi', p: 6, d: 'その色の玉が当たると2つに分かれ、ふえた玉は盤のいちばん上まで飛ぶ', rocket: true,
+    add: () => 1 },
+  hanabi:   { r: 1, n: '花火', s: 'firework', p: 6, d: 'その色の玉が当たると、5色の玉が1つずつ飛び出す', to: 'five',
+    add: () => 5 },
+  kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 5, d: 'その色の玉が当たると1つふえる。当たるたびに育って、6回ごとにふえる数が1つ増える（ずっと）', grow: true,
+    add: o => 1 + Math.floor((o.g || 0) / 6) },
+  fox:      { r: 1, n: 'おコンの算盤', s: 'fox', p: 6, d: 'その色の玉が当たると、盤にある同じ色の役物の数だけふえる',
+    add: (o, i, b) => b.filter(x => x && x.c === o.c).length },
+  kaminari: { r: 2, n: '雷', s: 'kaminari', p: 8, any: true, d: 'どの色の玉が当たっても、同じ段の役物をぜんぶ発動する（それぞれの役物から玉が出る）', chain: 'row',
+    add: () => 0 },
+  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 8, d: 'その色の玉が当たると、10こに分かれる',
+    add: () => 9 },
+  happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 8, any: true, d: 'どの色の玉でも、当たるたびに分身する（同じ玉でも何回でも）', again: true,
+    add: () => 1 },
 };
 const YAKUMONO_KEYS = Object.keys(YAKUMONO);
 const RARITY_NAME = ['ふつう', 'めずらしい', 'とくべつ'];
+const pieceName = o => YAKUMONO[o.k].any ? YAKUMONO[o.k].n : `${COLORS[o.c].n}の${YAKUMONO[o.k].n.replace(/^赤/, '')}`;
 
-// 1手番ごとに出る3つの候補（夜が進むほど、めずらしい役物が出やすい）
+// 1手番ごとに出る3つの候補（夜が進むほど、めずらしい役物が出やすい）。色はここで決まる
 function draft(r, night, n = 3) {
   const w = [70, 26 + night * 2, 4 + night * 2];
   const picks = [];
   for (let t = 0; picks.length < n && t < 50; t++) {
     let x = r() * (w[0] + w[1] + w[2]), rr = 0;
     while (x > w[rr]) { x -= w[rr]; rr++; }
-    const pool = YAKUMONO_KEYS.filter(k => YAKUMONO[k].r === rr && !picks.includes(k));
-    if (pool.length) picks.push(pool[Math.floor(r() * pool.length)]);
+    const pool = YAKUMONO_KEYS.filter(k => YAKUMONO[k].r === rr && !picks.some(p => p.k === k));
+    if (pool.length) { const k = pool[Math.floor(r() * pool.length)]; picks.push({ k, c: YAKUMONO[k].any ? ANY : Math.floor(r() * 5) }); }
   }
   return picks;
 }
@@ -83,88 +93,96 @@ function matchPockets(pockets, boss) {
   if (boss && boss.fx === 'shime') return pockets.map((m, i) => i === 0 || i === 6 ? 0 : m);
   return pockets.slice();
 }
+// その勝負で打つ玉：5色を1つずつ（順番はばらばら）＋玉袋の分はランダムな色。どれも1%で虹
+function makeHand(r, extra, boss) {
+  const h = shuffle([0, 1, 2, 3, 4], r);
+  for (let i = 0; i < extra; i++) h.push(Math.floor(r() * 5));
+  return h.map(c => {
+    if (r() < NIJI_RATE) return NIJI;
+    if (boss && boss.fx === 'neon') return r() < .5 ? 1 : 4;   // アオのネオン：青か紫に染まる
+    return c;
+  });
+}
 
-// ===== 相手 =====
+// ===== 真夜中のできごと =====
 const BOSSES = [
   { who: 'ponta', n: 'ポン太', rule: '化かし', rd: 'ポン太の葉っぱで、盤の役物が2つ ただの釘に化けてしまう', fx: 'bake' },
   { who: 'ohana', n: 'おハナ', rule: '花冷え', rd: '夜が冷えて、入賞口の倍率がぜんぶ1つ下がる（×1はそのまま）', fx: 'pocket1' },
   { who: 'uzuki', n: 'ウヅキ', rule: '餅つき', rd: 'ぺったんぺったん盤がゆれて、玉が打った位置から大きくずれる', fx: 'shake' },
-  { who: 'ao',    n: 'アオ', rule: 'ネオン', rd: 'ネオンに光を吸われて、役物で入る文が半分になる', fx: 'neon' },
-  { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。いちばん左と右の入賞口に入っても0点', fx: 'shime' },
+  { who: 'ao',    n: 'アオ', rule: 'ネオン', rd: 'ネオンの光で、打つ玉がぜんぶ 青か紫 に染まる（虹の玉はそのまま）', fx: 'neon' },
+  { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。いちばん左と右の入賞口に入った玉は数えない', fx: 'shime' },
 ];
-const MINIONS = [
-  [{ n: 'かえるの番頭', s: 'frog' }, { n: 'うさぎの飴屋', s: 'rabbit' }],
-  [{ n: 'すずめのお宿', s: 'sparrow' }, { n: 'ふくろう先生', s: 'fukurou' }],
-  [{ n: 'たこの八っつぁん', s: 'octopus' }, { n: '天狗の旦那', s: 'tengu' }],
-  [{ n: 'くじらの親方', s: 'whale' }, { n: '鷹の目の辰', s: 'eagle' }],
-];
-const NIGHT_BASE = [2000, 8500, 36000, 125000, 420000];   // 点の桁を大きく（文を10倍にしたのに合わせて10倍）
+const MINIONS = [];
+const NIGHT_BASE = [8, 40, 140, 450, 1400];   // ためる縁（玉の数）
 const STORY_NIGHTS = 5;
 const MATCH_MULT = [1, 1.5, 2];
 const MATCH_NAME = ['宵', '夜ふけ', '真夜中'];
 const REWARD = [3, 4, 5];
 const BASE_BALLS = 5;
-const START_BOARD = { 16: 'chochin', 22: 'suzu', 23: 'dango', 29: 'chochin', 36: 'dango' };
+const START_BOARD = { 16: { k: 'chochin', c: 0 }, 22: { k: 'suzu', c: ANY }, 30: { k: 'chochin', c: 1 } };
 
 function nightBase(n) {
   if (n <= NIGHT_BASE.length) return NIGHT_BASE[n - 1];
-  return Math.round(NIGHT_BASE[NIGHT_BASE.length - 1] * Math.pow(3, n - NIGHT_BASE.length) / 1000) * 1000;
+  return Math.round(NIGHT_BASE[NIGHT_BASE.length - 1] * Math.pow(2.5, n - NIGHT_BASE.length) / 10) * 10;
 }
-function target(n, k) { return Math.round(nightBase(n) * MATCH_MULT[k] / 100) * 100; }
+function target(n, k) { const v = nightBase(n) * MATCH_MULT[k]; return v < 100 ? Math.round(v) : Math.round(v / 10) * 10; }
 // 宵・夜ふけは月見座でふつうに打つ。真夜中は、その夜の「できごと」がある
 function opponent(n, k) { return k === 2 ? BOSSES[(n - 1) % BOSSES.length] : { n: '月見座', who: 'ginko', plain: true }; }
-function newBoard() { const b = SLOTS.map(() => null); for (const [i, k] of Object.entries(START_BOARD)) b[i] = { k }; return b; }
+function newBoard() { const b = SLOTS.map(() => null); for (const [i, o] of Object.entries(START_BOARD)) b[i] = { ...o }; return b; }
 
 // ===== 一発（玉を打ってから、ぜんぶ入賞するまで） =====
-// opt: { board, pockets, disabled:Set, block:bool, r:乱数 }
-function newShot(x, opt) {
+// opt: { board, pockets, disabled:Set, block:bool, shake:bool, r:乱数 }
+function newBall(x, y, vx, vy, color, used, gen) { return { x, y, vx, vy, color, gen: gen || 0, used: new Set(used || []), alive: true, slow: 0, rocket: false, againT: {} }; }
+function newShot(x, opt, color) {
   const r = opt.r;
+  const x0 = Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, x + (r() - .5) * (opt.shake ? 130 : 3)));
   return {
-    opt, r, t: 0, done: false,
-    balls: [{ x: Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, x + (r() - .5) * (opt.shake ? 130 : 3))), y: 34, vx: (r() - .5) * 20, vy: 40, alive: true, hit: {}, slow: 0, bounces: 0 }],
-    mon: 0, mul: 1, hits: 0, kinds: new Set(), coins: 0, onceUsed: new Map(),
-    landed: [], events: [],
+    opt, r, t: 0, done: false, color,
+    balls: [newBall(x0, 34, (r() - .5) * 20, 40, color)],
+    born: 1, overflow: 0, count: 0, landed: [], events: [],
   };
 }
-function trigger(s, i, direct, ball) {
+// 役物 i から、玉を n こ出す
+function spawn(s, i, n, parent, Y, color) {
+  const sl = SLOTS[i];
+  const cols = Y.to === 'five' ? [0, 1, 2, 3, 4] : null;
+  for (let j = 0; j < n; j++) {
+    const c = cols ? cols[j % 5] : Y.to === 'next' || Y.recolor ? nextColor(color) : color;
+    const alive = s.balls.filter(b => b.alive).length;
+    if (alive >= MAX_ALIVE) { s.overflow++; continue; }
+    const ang = Math.PI * (.15 + .7 * (n === 1 ? .5 : j / (n - 1))) + Math.PI;   // 上むきの扇形に飛び出す
+    const sp = 160 + s.r() * 80;
+    const nb = newBall(sl.x, sl.y - ITEM_R - BALL_R, Math.cos(ang) * sp, Math.sin(ang) * sp * .6, c, parent ? parent.used : [i], (parent ? parent.gen : 0) + 1);
+    nb.used.add(i);
+    if (Y.rocket) { nb.rocket = true; nb.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, sl.y - 40)); nb.vx = (s.r() - .5) * 90; }
+    if (Y.again) nb.againT[i] = s.t + .3;
+    s.balls.push(nb); s.born++;
+  }
+}
+// 役物 i が玉 ball（色 color）で発動する
+function trigger(s, i, ball, color, viaChain, chainFrom) {
   const b = s.opt.board, o = b[i];
-  const ev = { type: 'hit', i, x: SLOTS[i].x, y: SLOTS[i].y };
-  if (!o || s.opt.disabled.has(i)) {
-    if (!direct) return;
-    s.mon += NAIL_MON; ev.nail = true; ev.text = '+' + NAIL_MON; s.events.push(ev); return;
-  }
+  if (!o || s.opt.disabled.has(i)) return;
   const Y = YAKUMONO[o.k];
-  // once：一発に何回まで効くか（true は1回）
-  if (Y.once) { const n = s.onceUsed.get(i) || 0; if (n >= (Y.once === true ? 1 : Y.once)) return; s.onceUsed.set(i, n + 1); }
-  s.hits++; s.kinds.add(o.k);
-  const before = s.mon;
-  ev.text = Y.fx(s, i, o, b);
-  if (ev.text == null) return;
-  if (s.opt.neon && s.mon > before) { const half = Math.round((s.mon - before) / 2); s.mon = before + half; ev.text = `+${half}文`; }
-  ev.k = o.k; s.events.push(ev);
-  if (direct && ball) {
-    // 鯉：盤のいちばん上まで、まっすぐ飛ばす（のぼるあいだは釘をすりぬける）
-    if (Y.bounce && ball.bounces < 1) {
-      ball.bounces++; ball.rocket = true;
-      ball.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, ball.y - 40)); ball.vx = (s.r() - .5) * 90;
-      s.events.push({ type: 'rocket', x: ball.x, y: ball.y });
-    }
-    // 葉っぱ：当たるたびに分身。生まれたての玉は、同じ葉っぱに0.25秒は反応しない
-    if (Y.split && s.balls.length < MAX_BALLS) {
-      const sp = Math.max(160, Math.abs(ball.vx));
-      const nb = { x: ball.x, y: ball.y, vx: -Math.sign(ball.vx || 1) * sp, vy: ball.vy, alive: true, hit: {}, slow: 0, bounces: ball.bounces, skip: i, skipT: s.t + .25 };
-      ball.skip = i; ball.skipT = s.t + .25;
-      s.balls.push(nb); s.events.push({ type: 'split', x: ball.x, y: ball.y });
-    }
-    if (Y.chain) {
-      const targets = Y.chain === 'nb' ? SLOTS[i].nb : SLOTS.map((t, j) => j).filter(j => j !== i && SLOTS[j].row === SLOTS[i].row);
-      targets.forEach(j => { if (b[j] && !s.opt.disabled.has(j) && !YAKUMONO[b[j].k].chain) trigger(s, j, false); });
-    }
+  if (!colorMatch(color, o.c)) return;
+  if (ball && ball.gen >= MAX_GEN) return;
+  if (ball) {
+    if (Y.again) { if (ball.againT[i] && s.t < ball.againT[i]) return; ball.againT[i] = s.t + .3; }
+    else { if (ball.used.has(i)) return; ball.used.add(i); }
   }
+  if (Y.grow) o.g = (o.g || 0) + 1;
+  let n = Y.add(o, i, b, s);
+  if (Y.recolor && ball) ball.color = nextColor(ball.color);   // 桜：当たった玉も次の色に
+  if (n > 0) spawn(s, i, n, ball || chainFrom, Y, color);
+  s.events.push({ type: 'hit', i, k: o.k, x: SLOTS[i].x, y: SLOTS[i].y, n, c: o.c, chain: !!viaChain });
+  if (Y.chain === 'row' && !viaChain) {
+    SLOTS.forEach((t, j) => { if (j !== i && t.row === SLOTS[i].row && b[j] && !YAKUMONO[b[j].k].chain) trigger(s, j, null, NIJI, true, ball); });
+  }
+  if (Y.rocket && n > 0) s.events.push({ type: 'rocket', x: SLOTS[i].x, y: SLOTS[i].y });
 }
 function collide(ball, cx, cy, R, e, s) {
   const dx = ball.x - cx, dy = ball.y - cy, d = Math.hypot(dx, dy);
-  if (d >= R || d === 0) return false;
+  if (d >= R || d === 0) return 0;
   const nx = dx / d, ny = dy / d;
   ball.x = cx + nx * R; ball.y = cy + ny * R;
   const vn = ball.vx * nx + ball.vy * ny;
@@ -178,7 +196,8 @@ function collide(ball, cx, cy, R, e, s) {
 function stepShot(s, dt) {
   s.t += dt;
   const b = s.opt.board;
-  for (const ball of s.balls) {
+  for (let bi = 0; bi < s.balls.length; bi++) {
+    const ball = s.balls[bi];
     if (!ball.alive) continue;
     ball.vy += GRAVITY * dt;
     if (ball.rocket && ball.vy >= 0) ball.rocket = false;   // いちばん上に着いたら、ふつうに落ちる
@@ -193,24 +212,22 @@ function stepShot(s, dt) {
       const sl = SLOTS[i];
       if (Math.abs(sl.y - ball.y) > 24 || Math.abs(sl.x - ball.x) > 24) continue;
       const item = b[i] && !s.opt.disabled.has(i);
-      if (collide(ball, sl.x, sl.y, (item ? ITEM_R : NAIL_R) + BALL_R, .55, s) === 2 && !(ball.skip === i && s.t < ball.skipT)) trigger(s, i, true, ball);
+      if (collide(ball, sl.x, sl.y, (item ? ITEM_R : NAIL_R) + BALL_R, .55, s) === 2 && item) trigger(s, i, ball, ball.color);
     }
     // 止まったら、そっと押す
     if (Math.hypot(ball.vx, ball.vy) < 25) { ball.slow += dt; if (ball.slow > .35) { ball.vx = (s.r() - .5) * 160; ball.vy = -60; ball.slow = 0; } } else ball.slow = 0;
     if (ball.y >= POCKET_Y || s.t > SHOT_TIMEOUT) {
       ball.alive = false;
-      const p = pocketOf(ball.x);
-      s.landed.push(p);
-      s.events.push({ type: 'pocket', p, x: ball.x });
+      const p = pocketOf(ball.x), m = s.opt.pockets[p];
+      s.landed.push(p); s.count += m;
+      s.events.push({ type: 'pocket', p, m, x: ball.x, c: ball.color });
     }
   }
-  if (s.balls.every(x => !x.alive)) s.done = true;
+  if (s.balls.every(x => !x.alive)) { s.done = true; s.count += s.overflow; }
 }
-// 入賞口の倍率：玉が分かれたら、入ったうちで いちばん高い入賞口の倍率
-function pocketMult(s) { return s.landed.reduce((a, p) => Math.max(a, s.opt.pockets[p]), 0); }
-function shotTotal(s) { return Math.floor(s.mon * s.mul * pocketMult(s)); }
+function shotTotal(s) { return s.count + (s.done ? 0 : s.overflow); }
 // 最後まで一気に（シミュレーター用）
-function runShot(x, opt) { const s = newShot(x, opt); while (!s.done) stepShot(s, 1 / 120); return s; }
+function runShot(x, opt, color) { const s = newShot(x, opt, color); while (!s.done) stepShot(s, 1 / 120); return s; }
 
 // ===== 乱数 =====
 function rng(seed) {
@@ -223,6 +240,7 @@ function shuffle(arr, r) { for (let i = arr.length - 1; i > 0; i--) { const j = 
 
 if (typeof module !== 'undefined') module.exports = {
   W, H, BALL_R, NAIL_R, ITEM_R, POCKET_Y, SLOTS, POCKETS_START, pocketOf, YAKUMONO, YAKUMONO_KEYS, BOSSES, MINIONS,
-  target, opponent, nightBase, newBoard, draft, matchPockets, RARITY_NAME, NAIL_MON, newShot, stepShot, runShot, shotTotal, pocketMult, rng, shuffle,
-  STORY_NIGHTS, MATCH_NAME, REWARD, BASE_BALLS,
+  COLORS, NIJI, ANY, colorName, colorMatch, nextColor, pieceName, makeHand,
+  target, opponent, nightBase, newBoard, draft, matchPockets, RARITY_NAME, newShot, stepShot, runShot, shotTotal, rng, shuffle,
+  STORY_NIGHTS, MATCH_NAME, REWARD, BASE_BALLS, MAX_ALIVE, MAX_GEN,
 };
