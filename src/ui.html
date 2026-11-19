@@ -98,6 +98,7 @@ body.playing .wrap{padding-bottom:4px}
 #s-play .boardwrap{margin-left:auto;margin-right:auto}
 .boardwrap{position:relative;margin-top:6px;border:3px solid var(--edge);box-shadow:0 0 0 2px #b8862a,0 6px 0 #0008;background:#2a1530;line-height:0}
 canvas.board{width:100%;display:block;touch-action:none}
+.ffmark{position:absolute;right:8px;top:8px;font-size:14px;color:#fff3c4;background:#000a;padding:4px 8px;line-height:1;pointer-events:none;border:2px solid var(--gold)}
 .hint{position:absolute;left:0;right:0;top:6px;text-align:center;font-size:12px;color:#ffe2a8;line-height:1.4;pointer-events:none;text-shadow:1px 1px 0 #000}
 .calc{display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;margin-top:8px;flex-wrap:wrap}
 .calc .box{min-width:64px;text-align:center;padding:3px 6px;border:3px solid var(--edge);color:#fff}
@@ -237,7 +238,7 @@ canvas.board{width:100%;display:block;touch-action:none}
       <button class="stat px" id="bList">役物<b style="font-size:14px;margin-top:3px">一覧</b></button>
       <button class="stat px" id="bSpeed">速さ<b style="font-size:14px;margin-top:3px" id="speedLbl">ふつう</b></button>
     </div>
-    <div class="boardwrap"><canvas class="board" id="cv"></canvas><div class="hint" id="hint">盤をさわって、落とす位置を決める<br>指をはなすと玉が出る</div></div>
+    <div class="boardwrap"><canvas class="board" id="cv"></canvas><div class="hint" id="hint">盤をさわって、落とす位置を決める<br>指をはなすと玉が出る</div><div class="ffmark hidden" id="ffMark">▶▶ 早送り</div></div>
     <div class="placebar hidden" id="placeBar"><button class="btn" id="bRepick">えらびなおす</button></div>
     <div class="calc">
       <div class="box mon"><span class="lbl">盤の玉</span><span id="cMon">0</span></div>

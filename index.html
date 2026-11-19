@@ -98,6 +98,7 @@ body.playing .wrap{padding-bottom:4px}
 #s-play .boardwrap{margin-left:auto;margin-right:auto}
 .boardwrap{position:relative;margin-top:6px;border:3px solid var(--edge);box-shadow:0 0 0 2px #b8862a,0 6px 0 #0008;background:#2a1530;line-height:0}
 canvas.board{width:100%;display:block;touch-action:none}
+.ffmark{position:absolute;right:8px;top:8px;font-size:14px;color:#fff3c4;background:#000a;padding:4px 8px;line-height:1;pointer-events:none;border:2px solid var(--gold)}
 .hint{position:absolute;left:0;right:0;top:6px;text-align:center;font-size:12px;color:#ffe2a8;line-height:1.4;pointer-events:none;text-shadow:1px 1px 0 #000}
 .calc{display:flex;align-items:center;justify-content:center;gap:5px;font-size:17px;margin-top:8px;flex-wrap:wrap}
 .calc .box{min-width:64px;text-align:center;padding:3px 6px;border:3px solid var(--edge);color:#fff}
@@ -237,7 +238,7 @@ canvas.board{width:100%;display:block;touch-action:none}
       <button class="stat px" id="bList">役物<b style="font-size:14px;margin-top:3px">一覧</b></button>
       <button class="stat px" id="bSpeed">速さ<b style="font-size:14px;margin-top:3px" id="speedLbl">ふつう</b></button>
     </div>
-    <div class="boardwrap"><canvas class="board" id="cv"></canvas><div class="hint" id="hint">盤をさわって、落とす位置を決める<br>指をはなすと玉が出る</div></div>
+    <div class="boardwrap"><canvas class="board" id="cv"></canvas><div class="hint" id="hint">盤をさわって、落とす位置を決める<br>指をはなすと玉が出る</div><div class="ffmark hidden" id="ffMark">▶▶ 早送り</div></div>
     <div class="placebar hidden" id="placeBar"><button class="btn" id="bRepick">えらびなおす</button></div>
     <div class="calc">
       <div class="box mon"><span class="lbl">盤の玉</span><span id="cMon">0</span></div>
@@ -280,7 +281,8 @@ canvas.board{width:100%;display:block;touch-action:none}
 // 1回の勝負：役物を PICKS 回置いて、1か所から手玉を全部いっぺんに落とす。
 // どの玉も、1つの役物で1回だけ効果が出る。分かれた玉は新しい玉で、下の役物でまたふえる。
 // ただし「1回の落としで1回だけ」の役物（once）もある（花火など、玉ごとに出ると強すぎるもの）。
-// 盤に一度に出る玉は MAX_ALIVE こまで。それをこえた分は、生まれた役物の下から順番に こぼれ落ちる（1つも捨てない）。
+// 盤に一度に出る玉は MAX_ALIVE こまで。それをこえた分は、生まれた役物の下で順番を待って出る（1つも捨てない）。
+// 上限なしだと、100回に1回は同時に数万こ（最大130万こ）になってスマホが固まるため。
 
 const W = 360, H = 512;   // 釘は7段（スマホで盤と下の数字まで1画面に入るように）
 const BALL_R = 6, NAIL_R = 4, ITEM_R = 9;
@@ -288,7 +290,7 @@ const MIN_IMPACT = 40;   // 当たりは、玉がちゃんとぶつかったと�
 const ROWS_N = 7, ROW0 = 100, ROW_GAP = 50;   // 釘の段：7段、いちばん上の段の高さ、段の間
 const POCKET_Y = 452;
 const GRAVITY = 760, MAX_V = 720;
-const MAX_ALIVE = 2500;  // 盤に一度に出る玉の数（スマホで動かせる目安）
+const MAX_ALIVE = 4000;   // 盤に一度に出る玉の数（スマホで動かせる目安）
 const COOLDOWN = .3;     // 生まれた玉が、生まれた役物にすぐ当たらないための間
 const DROP_GAP = .15;    // 手玉を全部落とすときの、1つずつの間
 const WAIT_PER_STEP = 12;   // 順番待ちの玉を、1こまに何こまで出すか（1秒に1440こ）
@@ -1308,8 +1310,13 @@ function toAim() {
 }
 $('bRepick').onclick = () => { if (S.phase !== 'place' && S.phase !== 'draft') return; S.phase = 'draft'; S.pending = null; V.ghost = null; setHint(''); $('placeBar').classList.add('hidden'); paint(); openDraft(); };
 function toX(e) { const r = cv.getBoundingClientRect(); return Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, (e.clientX - r.left) / r.width * W)); }
+// 早送り：玉が落ちているあいだ、盤を長押しすると FF_RATE 倍の速さになる
+const FF_RATE = 4;
+let ffTimer = null;
+function ffStop() { clearTimeout(ffTimer); ffTimer = null; if (V && V.ff) { V.ff = false; $('ffMark').classList.add('hidden'); } }
 cv.addEventListener('pointerdown', e => {
   if (!S || !V) return;
+  if (S.phase === 'shooting') { cv.setPointerCapture(e.pointerId); clearTimeout(ffTimer); ffTimer = setTimeout(() => { if (S.phase === 'shooting') { V.ff = true; $('ffMark').classList.remove('hidden'); } }, 200); return; }
   if (S.phase === 'aim' && S.hand > 0) { cv.setPointerCapture(e.pointerId); V.aim = toX(e); paint(); }
   if (S.phase === 'place') { const i = slotAt(cv, e); V.ghost = i >= 0 ? i : null; paint(); }
 });
@@ -1320,14 +1327,16 @@ cv.addEventListener('pointermove', e => {
 });
 cv.addEventListener('pointerup', e => {
   if (!S || !V) return;
+  ffStop();
   if (S.phase === 'aim' && V.aim != null) { const x = V.aim; V.aim = null; shoot(x); return; }
   if (S.phase === 'place') { const i = slotAt(cv, e); V.ghost = null; if (i >= 0) place(i); else paint(); }
 });
-cv.addEventListener('pointercancel', () => { if (V) { V.aim = null; V.ghost = null; paint(); } });
+cv.addEventListener('pointercancel', () => { ffStop(); if (V) { V.aim = null; V.ghost = null; paint(); } });
 
 async function shoot(x) {
   S.phase = 'shooting';
-  const nBalls = S.hand; S.hand = 0; S.balls = 0; hud(); setHint('');
+  const nBalls = S.hand; S.hand = 0; S.balls = 0; hud(); setHint('盤を長押しで早送り');
+  setTimeout(() => { if ($('hint').textContent === '盤を長押しで早送り') setHint(''); }, 1800);
   const boss = curBoss();
   const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, nBalls);
   V.pk = s.pk;   // 太鼓・花火で書きかわる、この勝負の入賞口
@@ -1338,8 +1347,10 @@ async function shoot(x) {
   await new Promise(done => {
     const frame = now => {
       const dt = Math.min(.05, (now - last) / 1000); last = now;
-      acc += dt * S.speed;
-      while (acc >= 1 / 120 && !s.done) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; }
+      acc += dt * S.speed * (V.ff ? FF_RATE : 1);   // 盤を長押ししているあいだは早送り
+      let steps = 0;
+      while (acc >= 1 / 120 && !s.done && steps < 48) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; steps++; }
+      if (steps >= 48) acc = 0;   // 重いときは追いつこうとしない（固まらないように）
       for (; seen < s.events.length; seen++) {
         const ev = s.events[seen];
         if (ev.type === 'pk') {
@@ -1368,6 +1379,7 @@ async function shoot(x) {
     };
     requestAnimationFrame(frame);
   });
+  ffStop();
   const tot = shotTotal(s);
   const grownUp = afterShot(s, S.pockets);   // 玉が当たった金魚の真下の入賞口が、ずっと＋1
   grownUp.forEach(p => V.floats.push({ x: (p + .5) * W / NP, y: POCKET_Y - 20, text: '金魚：ずっと＋1', t: V.t, color: '#ff9a5a', big: true }));
@@ -1534,6 +1546,7 @@ const HOW = `<h3>あそびかた</h3><div style="font-size:14px;line-height:1.8"
 ・玉はぜんぶ同じ白い玉。手玉は${BASE_BALLS}こ（玉袋でふえる）<br>
 ・1回の勝負で、3つの役物から1つえらんで<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>のを${PICKS}回（役物の上に置くと置きかえ）<br>
 ・置きおわったら、盤をさわって落とす位置を決める。指をはなすと、<b>手玉が全部そこから つぎつぎに落ちる</b><br>
+・玉が落ちているあいだ、<b>盤を長押しすると早送り</b><br>
 ・役物は、当たった玉を分けたり、入賞口の倍率を上げたりする。どの玉も、1つの役物で1回だけ効果が出る（花火は1回の落としで1回だけ。鯉で飛んだ玉と、そこから分かれた玉は、もう鯉では飛ばない）。分かれた玉は、はね返った向きのまま飛んでいく新しい玉なので、ほかの役物でまたふえる<br>
 ・<b style="color:var(--gold)">縁 ＝ 入賞口に入った玉 × その入賞口の倍率</b>。入賞口は11こ。倍率は屋台のみがき・太鼓・花火・金魚で育つ<br>
 ・落とした縁が<b style="color:var(--gold)">目標の縁</b>をこえれば勝ち。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>

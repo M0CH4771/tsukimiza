@@ -415,8 +415,13 @@ function toAim() {
 }
 $('bRepick').onclick = () => { if (S.phase !== 'place' && S.phase !== 'draft') return; S.phase = 'draft'; S.pending = null; V.ghost = null; setHint(''); $('placeBar').classList.add('hidden'); paint(); openDraft(); };
 function toX(e) { const r = cv.getBoundingClientRect(); return Math.max(BALL_R + 2, Math.min(W - BALL_R - 2, (e.clientX - r.left) / r.width * W)); }
+// 早送り：玉が落ちているあいだ、盤を長押しすると FF_RATE 倍の速さになる
+const FF_RATE = 4;
+let ffTimer = null;
+function ffStop() { clearTimeout(ffTimer); ffTimer = null; if (V && V.ff) { V.ff = false; $('ffMark').classList.add('hidden'); } }
 cv.addEventListener('pointerdown', e => {
   if (!S || !V) return;
+  if (S.phase === 'shooting') { cv.setPointerCapture(e.pointerId); clearTimeout(ffTimer); ffTimer = setTimeout(() => { if (S.phase === 'shooting') { V.ff = true; $('ffMark').classList.remove('hidden'); } }, 200); return; }
   if (S.phase === 'aim' && S.hand > 0) { cv.setPointerCapture(e.pointerId); V.aim = toX(e); paint(); }
   if (S.phase === 'place') { const i = slotAt(cv, e); V.ghost = i >= 0 ? i : null; paint(); }
 });
@@ -427,14 +432,16 @@ cv.addEventListener('pointermove', e => {
 });
 cv.addEventListener('pointerup', e => {
   if (!S || !V) return;
+  ffStop();
   if (S.phase === 'aim' && V.aim != null) { const x = V.aim; V.aim = null; shoot(x); return; }
   if (S.phase === 'place') { const i = slotAt(cv, e); V.ghost = null; if (i >= 0) place(i); else paint(); }
 });
-cv.addEventListener('pointercancel', () => { if (V) { V.aim = null; V.ghost = null; paint(); } });
+cv.addEventListener('pointercancel', () => { ffStop(); if (V) { V.aim = null; V.ghost = null; paint(); } });
 
 async function shoot(x) {
   S.phase = 'shooting';
-  const nBalls = S.hand; S.hand = 0; S.balls = 0; hud(); setHint('');
+  const nBalls = S.hand; S.hand = 0; S.balls = 0; hud(); setHint('盤を長押しで早送り');
+  setTimeout(() => { if ($('hint').textContent === '盤を長押しで早送り') setHint(''); }, 1800);
   const boss = curBoss();
   const s = newShot(x, { board: S.board, pockets: S.pk, disabled: S.disabled, block: boss && boss.fx === 'block', shake: boss && boss.fx === 'shake', r: S.r }, nBalls);
   V.pk = s.pk;   // 太鼓・花火で書きかわる、この勝負の入賞口
@@ -445,8 +452,10 @@ async function shoot(x) {
   await new Promise(done => {
     const frame = now => {
       const dt = Math.min(.05, (now - last) / 1000); last = now;
-      acc += dt * S.speed;
-      while (acc >= 1 / 120 && !s.done) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; }
+      acc += dt * S.speed * (V.ff ? FF_RATE : 1);   // 盤を長押ししているあいだは早送り
+      let steps = 0;
+      while (acc >= 1 / 120 && !s.done && steps < 48) { stepShot(s, 1 / 120); acc -= 1 / 120; V.t += 1 / 120; steps++; }
+      if (steps >= 48) acc = 0;   // 重いときは追いつこうとしない（固まらないように）
       for (; seen < s.events.length; seen++) {
         const ev = s.events[seen];
         if (ev.type === 'pk') {
@@ -475,6 +484,7 @@ async function shoot(x) {
     };
     requestAnimationFrame(frame);
   });
+  ffStop();
   const tot = shotTotal(s);
   const grownUp = afterShot(s, S.pockets);   // 玉が当たった金魚の真下の入賞口が、ずっと＋1
   grownUp.forEach(p => V.floats.push({ x: (p + .5) * W / NP, y: POCKET_Y - 20, text: '金魚：ずっと＋1', t: V.t, color: '#ff9a5a', big: true }));
@@ -641,6 +651,7 @@ const HOW = `<h3>あそびかた</h3><div style="font-size:14px;line-height:1.8"
 ・玉はぜんぶ同じ白い玉。手玉は${BASE_BALLS}こ（玉袋でふえる）<br>
 ・1回の勝負で、3つの役物から1つえらんで<b style="color:var(--gold)">盤の好きな釘の場所に置く</b>のを${PICKS}回（役物の上に置くと置きかえ）<br>
 ・置きおわったら、盤をさわって落とす位置を決める。指をはなすと、<b>手玉が全部そこから つぎつぎに落ちる</b><br>
+・玉が落ちているあいだ、<b>盤を長押しすると早送り</b><br>
 ・役物は、当たった玉を分けたり、入賞口の倍率を上げたりする。どの玉も、1つの役物で1回だけ効果が出る（花火は1回の落としで1回だけ。鯉で飛んだ玉と、そこから分かれた玉は、もう鯉では飛ばない）。分かれた玉は、はね返った向きのまま飛んでいく新しい玉なので、ほかの役物でまたふえる<br>
 ・<b style="color:var(--gold)">縁 ＝ 入賞口に入った玉 × その入賞口の倍率</b>。入賞口は11こ。倍率は屋台のみがき・太鼓・花火・金魚で育つ<br>
 ・落とした縁が<b style="color:var(--gold)">目標の縁</b>をこえれば勝ち。ひと晩は 宵 → 夜ふけ → 真夜中。真夜中には、横丁のだれかが「できごと」を起こす<br>
