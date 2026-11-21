@@ -327,11 +327,11 @@ const YAKUMONO = {
   koban:    { r: 0, n: '小判', s: 'coin', p: 3, d: '玉が当たるたびに小銭がたまり、盤ぜんぶの小判で10こ当たるごとに縁銭＋1（玉はふえない）', coin: true,
     add: () => 0 },
   // ── めずらしい ──
-  maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '当たると、玉が3つに分かれる',
+  maneki:   { r: 1, n: '招き猫', s: 'cat', p: 6, d: '当たると玉が3つに分かれ、ぜんぶ まんなかの入賞口のほうへ はじく', pull: true,
     add: () => 2 },
   koi:      { r: 2, n: '鯉の滝のぼり', s: 'koi', p: 8, d: '当たった玉を、盤のいちばん上まで飛ばす（玉はふえない）。飛んだ玉と、その玉から分かれた玉は、もう鯉では飛ばない', lift: true,
     add: () => 0 },
-  taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 6, d: '玉が当たるたびに、真下の入賞口の倍率が この勝負のあいだ＋1（玉はふえない）', drum: true,
+  taiko:    { r: 1, n: '太鼓', s: 'taiko', p: 6, d: '玉が5こ当たるごとに、真下の入賞口の倍率が この勝負のあいだ＋1（玉はふえない）', drum: true,
     add: () => 0 },
   kingyo:   { r: 1, n: '金魚', s: 'goldfish', p: 6, d: '当たると玉が1つふえる。玉が当たった勝負のあと、真下の入賞口の倍率が＋1（ずっと）', grow: true,
     add: () => 1 },
@@ -340,8 +340,8 @@ const YAKUMONO = {
   // ── とくべつ ──
   kaminari: { r: 2, n: '雷', s: 'kaminari', p: 8, d: '当たった玉が、同じ段の となりの役物にも いっぺんに当たったことになる（雷そのものは玉をふやさない）', chain: true,
     add: () => 0 },
-  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 8, d: '当たると、玉が4つに分かれる',
-    add: () => 3 },
+  oni:      { r: 2, n: 'ゴンゾウの金棒', s: 'oni', p: 8, d: '玉が当たると、玉が8つに分かれる（1回の落としで1回だけ）', once: true,
+    add: () => 7 },
   happa:    { r: 2, n: 'ポン太の葉っぱ', s: 'tanuki', p: 8, d: '当たると玉が分身して、分身は盤の左右反対の場所に化けて出る（分身は、もとの玉がもう当たった役物では効果が出ない）', mirror: true,
     add: () => 1 },
   hanabi:   { r: 2, n: '花火', s: 'firework', p: 8, d: '玉が当たると、入賞口の倍率が ぜんぶ この勝負のあいだ＋2（1回の落としで1回だけ。玉はふえない）', fire: true, once: true,
@@ -381,7 +381,7 @@ const BOSSES = [
   { who: 'tetsu', n: 'テツ', rule: '締め釘', rd: 'テツが釘を締め直す。左はしと右はしの入賞口2つずつに入った玉は数えない', fx: 'shime' },
 ];
 const MINIONS = [];
-const NIGHT_BASE = [18, 100, 700, 5000, 40000];   // ためる縁
+const NIGHT_BASE = [15, 80, 400, 1500, 5000];   // ためる縁
 const STORY_NIGHTS = 5;
 const MATCH_MULT = [1, 1.7, 2.5];
 const PICKS = 2;   // 1回の勝負で、役物をえらんで置ける回数（そのあと手玉を全部落とす）
@@ -405,7 +405,7 @@ function newBoard() { const b = SLOTS.map(() => null); for (const [i, o] of Obje
 function newBall(x, y, vx, vy) { return { x, y, vx, vy, used: new Set(), cd: {}, alive: true, slow: 0, rocket: false }; }
 function newShot(x, opt, n) {
   const s = { opt, r: opt.r, x, t: 0, done: false, id: Math.floor(opt.r() * 1e9), queue: n, nextDrop: 0, wait: [],
-    balls: [], alive: 0, born: 0, count: 0, landedN: 0, events: [], pk: opt.pockets.slice(), coins: 0, coinHits: 0, grown: [], onceUsed: {} };
+    balls: [], alive: 0, born: 0, count: 0, landedN: 0, events: [], pk: opt.pockets.slice(), coins: 0, coinHits: 0, grown: [], onceUsed: {}, drum: SLOTS.map(() => 0) };
   dropNext(s);
   return s;
 }
@@ -451,15 +451,15 @@ function trigger(s, i, ball, viaChain) {
   ball.used.add(i);
   const sl = SLOTS[i], p = pocketOf(sl.x);
   const n = Y.add(o, i, b, s);
+  if (Y.pull) { ball.vx = (W / 2 - ball.x) * 1.6; ball.vy = Math.min(ball.vy, -40); }   // 先にはじいてから分ける（分かれた玉も同じ向き）
   if (n > 0) spawn(s, i, n, Y, ball);
   if (Y.lift) {   // 滝のぼり：当たった玉を上へ。この玉と、ここから分かれる玉は、もう鯉では飛ばない
     ball.noKoi = true; ball.rocket = true;
     ball.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, ball.y - 40)); ball.vx = (s.r() - .5) * 90;
     s.events.push({ type: 'rocket', x: sl.x, y: sl.y });
   }
-  if (Y.pull) { ball.vx = (W / 2 - ball.x) * 1.6; ball.vy = Math.min(ball.vy, -40); }
   if (Y.coin) { s.coinHits++; if (s.coinHits % 10 === 0) { s.coins++; s.events.push({ type: 'coin', x: sl.x, y: sl.y }); } }
-  if (Y.drum && s.pk[p] > 0) { s.pk[p]++; s.events.push({ type: 'pk', p, m: s.pk[p], x: sl.x, y: sl.y }); }
+  if (Y.drum && s.pk[p] > 0 && ++s.drum[i] % 5 === 0) { s.pk[p]++; s.events.push({ type: 'pk', p, m: s.pk[p], x: sl.x, y: sl.y }); }
   if (Y.fire) { for (let q = 0; q < s.pk.length; q++) if (s.pk[q] > 0) s.pk[q] += 2; s.events.push({ type: 'fire', x: sl.x, y: sl.y }); }
   if (Y.grow && !s.grown.includes(i)) s.grown.push(i);
   s.events.push({ type: 'hit', i, k: o.k, x: sl.x, y: sl.y, n, chain: !!viaChain });
@@ -1365,7 +1365,7 @@ async function shoot(x) {
           const Y = YAKUMONO[ev.k];
           if (!ev.n && !Y.chain) continue;
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
-          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .9)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
+          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
         } else if (ev.type === 'pocket') {
           V.plast = V.plast || {}; V.plast[ev.p] = V.t;   // 入った：入賞口のふちだけ光らせる
         } else if (ev.type === 'rocket') {

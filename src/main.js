@@ -470,7 +470,7 @@ async function shoot(x) {
           const Y = YAKUMONO[ev.k];
           if (!ev.n && !Y.chain) continue;
           const text = Y.chain ? 'ゴロゴロ！' : `+${ev.n}`;
-          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .9)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
+          if (!V.floats.some(f => f.x === ev.x && f.y === ev.y && V.t - f.t < .3)) V.floats.push({ x: ev.x, y: ev.y, text, t: V.t, color: '#ffe2a8', big: ev.n >= 3 || !!Y.chain });
         } else if (ev.type === 'pocket') {
           V.plast = V.plast || {}; V.plast[ev.p] = V.t;   // 入った：入賞口のふちだけ光らせる
         } else if (ev.type === 'rocket') {
